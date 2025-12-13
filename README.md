@@ -45,6 +45,8 @@ uv tool install --force https://github.com/kenneth-liao/youtube-data-tools.git
 
 ## Usage
 
+Each subcommand also supports a `-h` or `--help` option for detailed usage information (e.g., `yt-tools search -h`).
+
 ```bash
 # Search for videos
 yt-tools search "python tutorials"

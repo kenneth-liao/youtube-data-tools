@@ -260,6 +260,8 @@ YouTube Data Tools CLI Reference
 
 Usage: yt-tools <command> [arguments]
 
+For detailed help on any command, use `yt-tools <command> -h`.
+
 Commands:
   search       Search for videos
   details      Get video details
@@ -279,27 +281,125 @@ Examples:
   yt-tools transcript <video_id> --language en
 """
 
+COMMAND_DOCS = {
+    "search": """
+Search for videos on YouTube.
+
+Usage:
+  yt-tools search <query> [options]
+
+Arguments:
+  query           The search term(s)
+
+Options:
+  --max-results <int>   Maximum number of results to return (default: 10)
+  --channel-id <id>     Filter results by channel ID
+  --order <type>        Sort order (date, rating, relevance, title, videoCount, viewCount)
+  --duration <type>     Filter by duration (any, long, medium, short)
+  --json                Output results in JSON format
+""",
+    "details": """
+Get detailed information about a specific video.
+
+Usage:
+  yt-tools details <video_id> [options]
+
+Arguments:
+  video_id        YouTube Video ID or URL
+
+Options:
+  --json          Output results in JSON format
+""",
+    "channel": """
+Get detailed information about a YouTube channel.
+
+Usage:
+  yt-tools channel <channel_id> [options]
+
+Arguments:
+  channel_id      YouTube Channel ID or URL
+
+Options:
+  --json          Output results in JSON format
+""",
+    "transcript": """
+Get the transcript/captions for a video.
+
+Usage:
+  yt-tools transcript <video_id> [options]
+
+Arguments:
+  video_id        YouTube Video ID or URL
+
+Options:
+  --language <code>     Language code (e.g., 'en', 'ko')
+  --json                Output results in JSON format
+""",
+    "comments": """
+Get top-level comments for a video.
+
+Usage:
+  yt-tools comments <video_id> [options]
+
+Arguments:
+  video_id        YouTube Video ID or URL
+
+Options:
+  --max-results <int>   Maximum number of comments (default: 20)
+  --order <type>        Sort order (time, relevance) - default: relevance
+  --replies             Include replies in the output
+  --json                Output results in JSON format
+""",
+    "related": """
+Get videos related to a specific video.
+
+Usage:
+  yt-tools related <video_id> [options]
+
+Arguments:
+  video_id        YouTube Video ID or URL
+
+Options:
+  --max-results <int>   Maximum number of results (default: 10)
+  --json                Output results in JSON format
+""",
+    "trending": """
+Get current trending videos for a region.
+
+Usage:
+  yt-tools trending [options]
+
+Options:
+  --region <code>       Region code (ISO 3166-1 alpha-2) - default: US
+  --max-results <int>   Maximum number of results (default: 10)
+  --json                Output results in JSON format
+""",
+    "docs": """
+Show the full documentation.
+
+Usage:
+  yt-tools docs
+"""
+}
+
 class CustomHelpParser(argparse.ArgumentParser):
+    def __init__(self, *args, **kwargs):
+        self.custom_help_text = kwargs.pop('custom_help_text', None)
+        super().__init__(*args, **kwargs)
+
     def format_help(self):
-        # Return our custom concise docs instead of auto-generated help
-        return CONCISE_DOCS
+        if self.custom_help_text:
+            return self.custom_help_text
+        return super().format_help()
 
 def build_parser() -> argparse.ArgumentParser:
     # Use our custom parser for the main entry point to override --help output
     p = CustomHelpParser(
         "yt-tools",
         description="YouTube Data Tools CLI (MCP Compatible)",
-        add_help=False  # Disable default -h/--help to handle it via our custom logic if needed, 
-                        # but keeping it and overriding format_help is cleaner usually. 
-                        # However, argparse might still inject usage. 
-                        # Let's rely on format_help override.
+        add_help=False,
+        custom_help_text=CONCISE_DOCS
     )
-    # Re-add help argument manually if add_help=False, or just let it be and override format_help.
-    # If we inherit, format_help is sufficient.
-    
-    # Actually, we need to add -h/--help manually if we want it to trigger the action
-    # But CustomHelpParser inheriting from ArgumentParser normally has it.
-    # Let's try standard inheritance first.
     
     p.add_argument(
         "-v", "--version",
@@ -313,10 +413,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Show this help message and exit"
     )
 
-    sub = p.add_subparsers(dest="cmd", required=False)
+    # Use CustomHelpParser for subcommands so they can also have custom help text
+    sub = p.add_subparsers(dest="cmd", required=False, parser_class=CustomHelpParser)
 
     # Search
-    s = sub.add_parser("search", help="Search for YouTube videos")
+    s = sub.add_parser("search", help="Search for YouTube videos", custom_help_text=COMMAND_DOCS["search"])
     s.add_argument("query", help="Search query")
     s.add_argument("--max-results", type=int, default=10, help="Max results (default: 10)")
     s.add_argument("--channel-id", help="Filter by channel ID")
@@ -326,26 +427,26 @@ def build_parser() -> argparse.ArgumentParser:
     s.set_defaults(func=cmd_search)
 
     # Details
-    d = sub.add_parser("details", help="Get video details")
+    d = sub.add_parser("details", help="Get video details", custom_help_text=COMMAND_DOCS["details"])
     d.add_argument("video_id", help="YouTube Video ID or URL")
     d.add_argument("--json", action="store_true", help="Output JSON")
     d.set_defaults(func=cmd_details)
 
     # Channel
-    c = sub.add_parser("channel", help="Get channel details")
+    c = sub.add_parser("channel", help="Get channel details", custom_help_text=COMMAND_DOCS["channel"])
     c.add_argument("channel_id", help="YouTube Channel ID or URL")
     c.add_argument("--json", action="store_true", help="Output JSON")
     c.set_defaults(func=cmd_channel)
 
     # Transcript
-    t = sub.add_parser("transcript", help="Get video transcript")
+    t = sub.add_parser("transcript", help="Get video transcript", custom_help_text=COMMAND_DOCS["transcript"])
     t.add_argument("video_id", help="YouTube Video ID or URL")
     t.add_argument("--language", help="Language code (e.g., 'en', 'ko')")
     t.add_argument("--json", action="store_true", help="Output JSON")
     t.set_defaults(func=cmd_transcript)
 
     # Comments
-    cm = sub.add_parser("comments", help="Get video comments")
+    cm = sub.add_parser("comments", help="Get video comments", custom_help_text=COMMAND_DOCS["comments"])
     cm.add_argument("video_id", help="YouTube Video ID or URL")
     cm.add_argument("--max-results", type=int, default=20, help="Max comments (default: 20)")
     cm.add_argument("--order", choices=['time', 'relevance'], default='relevance', help="Order by")
@@ -354,21 +455,21 @@ def build_parser() -> argparse.ArgumentParser:
     cm.set_defaults(func=cmd_comments)
 
     # Related
-    r = sub.add_parser("related", help="Get related videos")
+    r = sub.add_parser("related", help="Get related videos", custom_help_text=COMMAND_DOCS["related"])
     r.add_argument("video_id", help="YouTube Video ID or URL")
     r.add_argument("--max-results", type=int, default=10, help="Max results")
     r.add_argument("--json", action="store_true", help="Output JSON")
     r.set_defaults(func=cmd_related)
 
     # Trending
-    tr = sub.add_parser("trending", help="Get trending videos")
+    tr = sub.add_parser("trending", help="Get trending videos", custom_help_text=COMMAND_DOCS["trending"])
     tr.add_argument("--region", default="US", help="Region code (default: US)")
     tr.add_argument("--max-results", type=int, default=10, help="Max results")
     tr.add_argument("--json", action="store_true", help="Output JSON")
     tr.set_defaults(func=cmd_trending)
 
     # Docs
-    doc = sub.add_parser("docs", help="Display full documentation")
+    doc = sub.add_parser("docs", help="Display full documentation", custom_help_text=COMMAND_DOCS["docs"])
     doc.set_defaults(func=cmd_docs)
 
     return p

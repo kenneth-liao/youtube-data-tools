@@ -21,6 +21,7 @@ yt-tools search <query> [options]
 - `query`: The search term(s)
 
 **Options:**
+- `-h, --help`: Show help message for the 'search' command
 - `--max-results <int>`: Maximum number of results to return (default: 10)
 - `--channel-id <id>`: Filter results by channel ID
 - `--order <type>`: Sort order (date, rating, relevance, title, videoCount, viewCount)
@@ -41,6 +42,7 @@ yt-tools details <video_id> [options]
 - `video_id`: YouTube Video ID or URL
 
 **Options:**
+- `-h, --help`: Show help message for the 'details' command
 - `--json`: Output results in JSON format
 
 ---
@@ -57,6 +59,7 @@ yt-tools channel <channel_id> [options]
 - `channel_id`: YouTube Channel ID or URL
 
 **Options:**
+- `-h, --help`: Show help message for the 'channel' command
 - `--json`: Output results in JSON format
 
 ---
@@ -73,6 +76,7 @@ yt-tools transcript <video_id> [options]
 - `video_id`: YouTube Video ID or URL
 
 **Options:**
+- `-h, --help`: Show help message for the 'transcript' command
 - `--language <code>`: Language code (e.g., 'en', 'ko')
 - `--json`: Output results in JSON format
 
@@ -90,6 +94,7 @@ yt-tools comments <video_id> [options]
 - `video_id`: YouTube Video ID or URL
 
 **Options:**
+- `-h, --help`: Show help message for the 'comments' command
 - `--max-results <int>`: Maximum number of comments (default: 20)
 - `--order <type>`: Sort order (time, relevance) - default: relevance
 - `--replies`: Include replies in the output
@@ -109,6 +114,7 @@ yt-tools related <video_id> [options]
 - `video_id`: YouTube Video ID or URL
 
 **Options:**
+- `-h, --help`: Show help message for the 'related' command
 - `--max-results <int>`: Maximum number of results (default: 10)
 - `--json`: Output results in JSON format
 
@@ -123,6 +129,7 @@ yt-tools trending [options]
 ```
 
 **Options:**
+- `-h, --help`: Show help message for the 'trending' command
 - `--region <code>`: Region code (ISO 3166-1 alpha-2) - default: US
 - `--max-results <int>`: Maximum number of results (default: 10)
 - `--json`: Output results in JSON format
