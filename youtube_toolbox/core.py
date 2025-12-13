@@ -145,8 +145,11 @@ class YouTubeService:
         video_id = self.parse_url(video_id)
         
         try:
+            # Instantiate the API client
+            yt_transcript_api = YouTubeTranscriptApi()
+
             if language:
-                transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+                transcript_list = yt_transcript_api.list(video_id)
                 try:
                     transcript = transcript_list.find_transcript([language])
                     return transcript.fetch()
@@ -160,7 +163,7 @@ class YouTubeService:
                         transcript = transcript_list.find_transcript(['en'])
                         return transcript.fetch()
             else:
-                return YouTubeTranscriptApi.get_video_transcript(video_id)
+                return yt_transcript_api.fetch(video_id)
                 
         except (TranscriptsDisabled, NoTranscriptFound) as e:
             logger.error(f"No transcript available for video {video_id}: {e}")
