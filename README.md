@@ -14,6 +14,18 @@ uv tool install https://github.com/kenneth-liao/youtube-data-tools.git
 
 This will install the CLI as a uv tool which can then be ran from anywhere. This makes it easily accssible from any of your AI agents (Claude, Codex, Gemini, etc.) while only having to configure it once!
 
+## Updating
+
+```bash
+uv tool update yt-tools
+```
+
+Or to force update:
+
+```bash
+uv tool install --force https://github.com/kenneth-liao/youtube-data-tools.git
+```
+
 ## Setup
 
 1.  Get a YouTube Data API key from the [Google Cloud Console](https://console.cloud.google.com/apis/credentials).
