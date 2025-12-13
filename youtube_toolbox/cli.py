@@ -11,10 +11,16 @@ from youtube_toolbox.core import YouTubeService
 # Load .env from current working directory or parent directories
 load_dotenv(find_dotenv(usecwd=True))
 
+# If YOUTUBE_API_KEY is not set, try loading from ~/.claude/.env
+if not os.environ.get("YOUTUBE_API_KEY"):
+    claude_env_path = os.path.join(os.path.expanduser("~"), ".claude", ".env")
+    if os.path.exists(claude_env_path):
+        load_dotenv(claude_env_path, override=True)
+
 def get_version() -> str:
     """Get the package version from metadata."""
     try:
-        return metadata.version("py-mcp-youtube-toolbox")
+        return metadata.version("youtube-data-api")
     except metadata.PackageNotFoundError:
         return "0.0.0-dev"
 
