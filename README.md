@@ -9,7 +9,7 @@ This CLI tool requires [uv](https://docs.astral.sh/uv/getting-started/installati
 ## Installation
 
 ```bash
-uv tool install https://github.com/kenneth-liao/youtube-data-api.git
+uv tool install https://github.com/kenneth-liao/youtube-data-tools.git
 ```
 
 This will install the CLI as a uv tool which can then be ran from anywhere. This makes it easily accssible from any of your AI agents (Claude, Codex, Gemini, etc.) while only having to configure it once!
@@ -35,16 +35,16 @@ This will install the CLI as a uv tool which can then be ran from anywhere. This
 
 ```bash
 # Search for videos
-youtube-toolbox search "python tutorials"
+yt-tools search "python tutorials"
 
 # Get video details
-youtube-toolbox details <video_id>
+yt-tools details <video_id>
 
 # Get video transcript
-youtube-toolbox transcript <video_id>
+yt-tools transcript <video_id>
 
 # Get channel stats
-youtube-toolbox channel <channel_id>
+yt-tools channel <channel_id>
 ```
 
 ## Development
@@ -59,5 +59,5 @@ youtube-toolbox channel <channel_id>
 3.  Run the CLI:
 
     ```bash
-    uv run youtube-toolbox --help
+    uv run yt-tools --help
     ```

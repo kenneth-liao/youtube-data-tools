@@ -19,7 +19,7 @@ dependencies = [
 ]
 
 [project.scripts]
-youtube-toolbox = "yt_tools.cli:main"
+yt-tools = "yt_tools.cli:main"
 
 
 [tool.hatch.build.targets.wheel]

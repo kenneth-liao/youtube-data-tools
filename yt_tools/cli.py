@@ -256,9 +256,9 @@ def cmd_docs(args: argparse.Namespace) -> int:
         raise ToolboxError(f"Error reading documentation: {e}")
 
 CONCISE_DOCS = """
-YouTube Toolbox CLI Reference
+YouTube Data Tools CLI Reference
 
-Usage: youtube-toolbox <command> [arguments]
+Usage: yt-tools <command> [arguments]
 
 Commands:
   search       Search for videos
@@ -274,9 +274,9 @@ Environment Variables:
   YOUTUBE_API_KEY  Required. Your Google Data API key.
 
 Examples:
-  youtube-toolbox search "python tutorials" --max-results 5
-  youtube-toolbox details <video_id>
-  youtube-toolbox transcript <video_id> --language en
+  yt-tools search "python tutorials" --max-results 5
+  yt-tools details <video_id>
+  yt-tools transcript <video_id> --language en
 """
 
 class CustomHelpParser(argparse.ArgumentParser):
@@ -287,8 +287,8 @@ class CustomHelpParser(argparse.ArgumentParser):
 def build_parser() -> argparse.ArgumentParser:
     # Use our custom parser for the main entry point to override --help output
     p = CustomHelpParser(
-        "youtube-toolbox",
-        description="YouTube Toolbox CLI (MCP Compatible)",
+        "yt-tools",
+        description="YouTube Data Tools CLI (MCP Compatible)",
         add_help=False  # Disable default -h/--help to handle it via our custom logic if needed, 
                         # but keeping it and overriding format_help is cleaner usually. 
                         # However, argparse might still inject usage. 
@@ -304,7 +304,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "-v", "--version",
         action="version",
-        version=f"youtube-toolbox {get_version()}"
+        version=f"yt-tools {get_version()}"
     )
     p.add_argument(
         "-h", "--help",

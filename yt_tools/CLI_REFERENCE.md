@@ -1,4 +1,4 @@
-# YouTube Toolbox CLI Reference
+# YouTube Data Tools CLI Reference
 
 A command-line interface for interacting with the YouTube Data API.
 
@@ -14,7 +14,7 @@ Search for videos on YouTube.
 
 **Usage:**
 ```bash
-youtube-toolbox search <query> [options]
+yt-tools search <query> [options]
 ```
 
 **Arguments:**
@@ -34,7 +34,7 @@ Get detailed information about a specific video.
 
 **Usage:**
 ```bash
-youtube-toolbox details <video_id> [options]
+yt-tools details <video_id> [options]
 ```
 
 **Arguments:**
@@ -50,7 +50,7 @@ Get detailed information about a YouTube channel.
 
 **Usage:**
 ```bash
-youtube-toolbox channel <channel_id> [options]
+yt-tools channel <channel_id> [options]
 ```
 
 **Arguments:**
@@ -66,7 +66,7 @@ Get the transcript/captions for a video.
 
 **Usage:**
 ```bash
-youtube-toolbox transcript <video_id> [options]
+yt-tools transcript <video_id> [options]
 ```
 
 **Arguments:**
@@ -83,7 +83,7 @@ Get top-level comments for a video.
 
 **Usage:**
 ```bash
-youtube-toolbox comments <video_id> [options]
+yt-tools comments <video_id> [options]
 ```
 
 **Arguments:**
@@ -102,7 +102,7 @@ Get videos related to a specific video.
 
 **Usage:**
 ```bash
-youtube-toolbox related <video_id> [options]
+yt-tools related <video_id> [options]
 ```
 
 **Arguments:**
@@ -119,7 +119,7 @@ Get current trending videos for a region.
 
 **Usage:**
 ```bash
-youtube-toolbox trending [options]
+yt-tools trending [options]
 ```
 
 **Options:**
@@ -134,5 +134,5 @@ Show this full documentation.
 
 **Usage:**
 ```bash
-youtube-toolbox docs
+yt-tools docs
 ```
