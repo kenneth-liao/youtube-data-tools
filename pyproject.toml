@@ -1,7 +1,26 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "youtube-data-api"
 version = "0.1.0"
-description = "Add your description here"
+description = "CLI tool for working with the YouTube Data API"
+authors = [
+    { name = "Kenny Liao", email = "kennyliao@theailaunchpad.io" },
+]
 readme = "README.md"
-requires-python = ">=3.13"
-dependencies = []
+license = { text = "Apache-2.0" }
+requires-python = ">=3.12"
+dependencies = [
+    "google-api-python-client>=2.169.0",
+    "python-dotenv>=1.1.0",
+    "youtube-transcript-api>=1.0.3",
+]
+
+[project.scripts]
+youtube-toolbox = "youtube_toolbox.cli:main"
+
+
+[tool.hatch.build.targets.wheel]
+packages = ["youtube_toolbox"]
