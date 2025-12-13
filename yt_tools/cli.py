@@ -243,8 +243,19 @@ def cmd_trending(args: argparse.Namespace) -> int:
     return 0
 
 def cmd_docs(args: argparse.Namespace) -> int:
-    """Display CLI documentation."""
-    docs = """
+    """Display full CLI documentation from CLI_REFERENCE.md."""
+    try:
+        # Get the directory where cli.py is located
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        doc_path = os.path.join(current_dir, "CLI_REFERENCE.md")
+        
+        with open(doc_path, "r", encoding="utf-8") as f:
+            print(f.read())
+        return 0
+    except Exception as e:
+        raise ToolboxError(f"Error reading documentation: {e}")
+
+CONCISE_DOCS = """
 YouTube Toolbox CLI Reference
 
 Usage: youtube-toolbox <command> [arguments]
@@ -257,7 +268,7 @@ Commands:
   comments     Get video comments
   related      Get related videos
   trending     Get trending videos
-  docs         Show this documentation
+  docs         Show full documentation
 
 Environment Variables:
   YOUTUBE_API_KEY  Required. Your Google Data API key.
@@ -266,21 +277,42 @@ Examples:
   youtube-toolbox search "python tutorials" --max-results 5
   youtube-toolbox details <video_id>
   youtube-toolbox transcript <video_id> --language en
-    """
-    print(docs)
-    return 0
+"""
+
+class CustomHelpParser(argparse.ArgumentParser):
+    def format_help(self):
+        # Return our custom concise docs instead of auto-generated help
+        return CONCISE_DOCS
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(
+    # Use our custom parser for the main entry point to override --help output
+    p = CustomHelpParser(
         "youtube-toolbox",
         description="YouTube Toolbox CLI (MCP Compatible)",
-        epilog="Run 'youtube-toolbox docs' for full documentation"
+        add_help=False  # Disable default -h/--help to handle it via our custom logic if needed, 
+                        # but keeping it and overriding format_help is cleaner usually. 
+                        # However, argparse might still inject usage. 
+                        # Let's rely on format_help override.
     )
+    # Re-add help argument manually if add_help=False, or just let it be and override format_help.
+    # If we inherit, format_help is sufficient.
+    
+    # Actually, we need to add -h/--help manually if we want it to trigger the action
+    # But CustomHelpParser inheriting from ArgumentParser normally has it.
+    # Let's try standard inheritance first.
+    
     p.add_argument(
         "-v", "--version",
         action="version",
         version=f"youtube-toolbox {get_version()}"
     )
+    p.add_argument(
+        "-h", "--help",
+        action="help",
+        default=argparse.SUPPRESS,
+        help="Show this help message and exit"
+    )
+
     sub = p.add_subparsers(dest="cmd", required=False)
 
     # Search
