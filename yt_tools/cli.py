@@ -6,7 +6,7 @@ from importlib import metadata
 from typing import List, Optional, Any
 from dotenv import load_dotenv, find_dotenv
 
-from youtube_toolbox.core import YouTubeService
+from yt_tools.core import YouTubeService
 
 # Load .env from current working directory or parent directories
 load_dotenv(find_dotenv(usecwd=True))
@@ -20,7 +20,7 @@ if not os.environ.get("YOUTUBE_API_KEY"):
 def get_version() -> str:
     """Get the package version from metadata."""
     try:
-        return metadata.version("youtube-data-api")
+        return metadata.version("youtube-data-tools")
     except metadata.PackageNotFoundError:
         return "0.0.0-dev"
 

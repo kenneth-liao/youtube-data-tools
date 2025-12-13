@@ -1,5 +1,5 @@
 def main():
-    print("Hello from youtube-data-api!")
+    print("Hello from youtube-data-tools!")
 
 
 if __name__ == "__main__":

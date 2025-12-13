@@ -294,7 +294,7 @@ wheels = [
 ]
 
 [[package]]
-name = "youtube-data-api"
+name = "youtube-data-tools"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [

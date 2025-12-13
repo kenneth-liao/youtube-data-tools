@@ -4,7 +4,7 @@ import unittest
 from io import StringIO
 from unittest.mock import MagicMock, patch
 
-from youtube_toolbox import cli
+from yt_tools import cli
 
 class TestCLI(unittest.TestCase):
     def setUp(self):
@@ -16,7 +16,7 @@ class TestCLI(unittest.TestCase):
         sys.stdout = self.held
         sys.stderr = self.held_err
 
-    @patch('youtube_toolbox.cli._get_service')
+    @patch('yt_tools.cli._get_service')
     def test_search_command(self, mock_get_service):
         # Setup mock service
         mock_service = MagicMock()
@@ -55,7 +55,7 @@ class TestCLI(unittest.TestCase):
         self.assertIn("Test Video", output)
         self.assertIn("video123", output)
 
-    @patch('youtube_toolbox.cli._get_service')
+    @patch('yt_tools.cli._get_service')
     def test_search_command_json(self, mock_get_service):
         mock_service = MagicMock()
         mock_get_service.return_value = mock_service
@@ -79,7 +79,7 @@ class TestCLI(unittest.TestCase):
         output = sys.stdout.getvalue()
         self.assertIn('"items": []', output)
 
-    @patch('youtube_toolbox.cli._get_service')
+    @patch('yt_tools.cli._get_service')
     def test_details_command(self, mock_get_service):
         mock_service = MagicMock()
         mock_get_service.return_value = mock_service
@@ -109,7 +109,7 @@ class TestCLI(unittest.TestCase):
         self.assertIn("Detailed Video", output)
         self.assertIn("1000", output)
 
-    @patch('youtube_toolbox.cli._get_service')
+    @patch('yt_tools.cli._get_service')
     def test_channel_command(self, mock_get_service):
         mock_service = MagicMock()
         mock_get_service.return_value = mock_service
@@ -138,7 +138,7 @@ class TestCLI(unittest.TestCase):
         self.assertIn("My Channel", output)
         self.assertIn("500", output)
 
-    @patch('youtube_toolbox.cli._get_service')
+    @patch('yt_tools.cli._get_service')
     def test_transcript_command(self, mock_get_service):
         mock_service = MagicMock()
         mock_get_service.return_value = mock_service
@@ -159,7 +159,7 @@ class TestCLI(unittest.TestCase):
         output = sys.stdout.getvalue()
         self.assertIn("Hello world", output)
 
-    @patch('youtube_toolbox.cli._get_service')
+    @patch('yt_tools.cli._get_service')
     def test_comments_command(self, mock_get_service):
         mock_service = MagicMock()
         mock_get_service.return_value = mock_service
@@ -195,7 +195,7 @@ class TestCLI(unittest.TestCase):
         self.assertIn("User1", output)
         self.assertIn("Great video!", output)
 
-    @patch('youtube_toolbox.cli._get_service')
+    @patch('yt_tools.cli._get_service')
     def test_related_command(self, mock_get_service):
         mock_service = MagicMock()
         mock_get_service.return_value = mock_service
@@ -221,7 +221,7 @@ class TestCLI(unittest.TestCase):
         output = sys.stdout.getvalue()
         self.assertIn("Related Video", output)
 
-    @patch('youtube_toolbox.cli._get_service')
+    @patch('yt_tools.cli._get_service')
     def test_trending_command(self, mock_get_service):
         mock_service = MagicMock()
         mock_get_service.return_value = mock_service
@@ -253,7 +253,7 @@ class TestCLI(unittest.TestCase):
         # this is just a sanity check that it returns a string
         self.assertIsInstance(v, str)
 
-    @patch('youtube_toolbox.cli._get_service')
+    @patch('yt_tools.cli._get_service')
     def test_error_handling(self, mock_get_service):
         mock_service = MagicMock()
         mock_get_service.return_value = mock_service
