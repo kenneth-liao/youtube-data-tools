@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "youtube-data-tools"
-version = "0.1.0"
+version = "0.2.1"
 description = "CLI tool for working with the YouTube Data API"
 authors = [
     { name = "Kenneth Liao", email = "kennyliao@theailaunchpad.io" },
@@ -14,6 +14,8 @@ license = { text = "Apache-2.0" }
 requires-python = ">=3.12"
 dependencies = [
     "google-api-python-client>=2.169.0",
+    "google-auth-oauthlib>=1.2.2",
+    "platformdirs>=4.3.8",
     "python-dotenv>=1.1.0",
     "youtube-transcript-api>=1.0.3",
 ]

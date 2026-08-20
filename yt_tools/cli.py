@@ -6,16 +6,17 @@ from importlib import metadata
 from typing import List, Optional, Any
 from dotenv import load_dotenv, find_dotenv
 
+from yt_tools.auth import AuthorizationError, authorize, resolve_credential_paths
 from yt_tools.core import YouTubeService
 
-# Load .env from current working directory or parent directories
-load_dotenv(find_dotenv(usecwd=True))
+def _load_api_key_environment() -> None:
+    """Load legacy API-key locations for public Data API commands only."""
+    load_dotenv(find_dotenv(usecwd=True))
+    if not os.environ.get("YOUTUBE_API_KEY"):
+        claude_env_path = os.path.join(os.path.expanduser("~"), ".claude", ".env")
+        if os.path.exists(claude_env_path):
+            load_dotenv(claude_env_path, override=True)
 
-# If YOUTUBE_API_KEY is not set, try loading from ~/.claude/.env
-if not os.environ.get("YOUTUBE_API_KEY"):
-    claude_env_path = os.path.join(os.path.expanduser("~"), ".claude", ".env")
-    if os.path.exists(claude_env_path):
-        load_dotenv(claude_env_path, override=True)
 
 def get_version() -> str:
     """Get the package version from metadata."""
@@ -31,6 +32,7 @@ class ToolboxError(Exception):
 def _get_service() -> YouTubeService:
     """Initialize and return the YouTube Service."""
     try:
+        _load_api_key_environment()
         return YouTubeService()
     except ValueError as e:
         raise ToolboxError(
@@ -242,6 +244,16 @@ def cmd_trending(args: argparse.Namespace) -> int:
         raise ToolboxError(f"Error getting trending videos: {e}")
     return 0
 
+def cmd_authorize(args: argparse.Namespace) -> int:
+    """Authorize access to an owned YouTube channel."""
+    paths = resolve_credential_paths(args.client_config_file, args.token_file)
+    try:
+        authorize(args.client_secrets, paths.client_config_file, paths.token_file)
+    except AuthorizationError as error:
+        raise ToolboxError(str(error)) from error
+    print(f"Authorization complete. Credentials stored in {paths.token_file.parent}")
+    return 0
+
 def cmd_docs(args: argparse.Namespace) -> int:
     """Display full CLI documentation from CLI_REFERENCE.md."""
     try:
@@ -270,6 +282,7 @@ Commands:
   comments     Get video comments
   related      Get related videos
   trending     Get trending videos
+  authorize    Authorize access to an owned YouTube channel
   docs         Show full documentation
 
 Environment Variables:
@@ -374,6 +387,17 @@ Options:
   --max-results <int>   Maximum number of results (default: 10)
   --json                Output results in JSON format
 """,
+    "authorize": """
+Authorize access to an owned YouTube channel.
+
+Usage:
+  yt-tools authorize --client-secrets <source> [options]
+
+Options:
+  --client-secrets <path>       Google OAuth client-secret source file (required)
+  --client-config-file <path>   Stored client configuration destination
+  --token-file <path>           Stored refreshable token destination
+""",
     "docs": """
 Show the full documentation.
 
@@ -467,6 +491,17 @@ def build_parser() -> argparse.ArgumentParser:
     tr.add_argument("--max-results", type=int, default=10, help="Max results")
     tr.add_argument("--json", action="store_true", help="Output JSON")
     tr.set_defaults(func=cmd_trending)
+
+    # Authorization
+    auth = sub.add_parser(
+        "authorize",
+        help="Authorize access to an owned YouTube channel",
+        custom_help_text=COMMAND_DOCS["authorize"],
+    )
+    auth.add_argument("--client-secrets", required=True, help="Google OAuth client-secret source file")
+    auth.add_argument("--client-config-file", help="Stored client configuration destination")
+    auth.add_argument("--token-file", help="Stored refreshable token destination")
+    auth.set_defaults(func=cmd_authorize)
 
     # Docs
     doc = sub.add_parser("docs", help="Display full documentation", custom_help_text=COMMAND_DOCS["docs"])

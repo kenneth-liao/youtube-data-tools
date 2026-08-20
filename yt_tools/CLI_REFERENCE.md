@@ -136,6 +136,24 @@ yt-tools trending [options]
 
 ---
 
+### `authorize`
+Authorize access to an owned YouTube channel with a Google OAuth client-secret file.
+
+**Usage:**
+```bash
+yt-tools authorize --client-secrets <source> [options]
+```
+
+**Options:**
+- `--client-secrets <path>`: Required user-selected Google OAuth client-secret source file
+- `--client-config-file <path>`: Stored canonical client configuration destination
+- `--token-file <path>`: Stored refreshable token destination
+
+Without destination overrides, credentials are stored with owner-only access in
+the operating system's per-user `yt-tools` application-data directory.
+
+---
+
 ### `docs`
 Show this full documentation.
 

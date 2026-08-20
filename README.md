@@ -43,6 +43,29 @@ uv tool install --force https://github.com/kenneth-liao/youtube-data-tools.git
 
     By default, the CLI will look for a `.env` file in the current directory and then ~/.claude/ if it can't find one in the current directory.
 
+## Channel-owner authorization
+
+Authorize private analytics access with a Google OAuth desktop client-secret file:
+
+```bash
+yt-tools authorize --client-secrets /path/to/client_secret.json
+```
+
+The command requests read-only YouTube and Analytics access. It stores a private
+copy of the client configuration and a refreshable token in the operating
+system's per-user `yt-tools` application-data directory. To select explicit
+storage destinations for automation:
+
+```bash
+yt-tools authorize \
+  --client-secrets /source/client_secret.json \
+  --client-config-file /secure/yt-tools/client_secret.json \
+  --token-file /secure/yt-tools/token.json
+```
+
+OAuth files are not discovered from project directories, `.env`, `~/.claude`,
+or `yutu` locations. Do not commit client-secret or token files.
+
 ## Usage
 
 Each subcommand also supports a `-h` or `--help` option for detailed usage information (e.g., `yt-tools search -h`).
