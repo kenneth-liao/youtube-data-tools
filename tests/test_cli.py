@@ -292,9 +292,15 @@ class TestCLI(unittest.TestCase):
         )
         self.assertIn("Authorization complete", sys.stdout.getvalue())
 
+    @patch("yt_tools.cli.build_data_api")
     @patch("yt_tools.cli.build_analytics_api")
     @patch("yt_tools.cli.load_authorized_credentials")
-    def test_analytics_query_outputs_named_json(self, load_credentials, build_api):
+    def test_analytics_query_outputs_named_json(
+        self,
+        load_credentials,
+        build_api,
+        build_data_api,
+    ):
         api = MagicMock()
         build_api.return_value = api
         api.reports.return_value.query.return_value.execute.return_value = {
@@ -335,9 +341,146 @@ class TestCLI(unittest.TestCase):
             startIndex=1,
             currency="USD",
         )
-        self.assertEqual(json.loads(sys.stdout.getvalue())["rows"], [
-            {"country": "US", "views": 20},
+        self.assertEqual(json.loads(sys.stdout.getvalue()), {
+            "requestedRange": {
+                "startDate": "2026-08-01",
+                "endDate": "2026-08-02",
+            },
+            "returnedRange": None,
+            "columns": [
+                {"name": "country", "columnType": "DIMENSION", "dataType": "STRING"},
+                {"name": "views", "columnType": "METRIC", "dataType": "INTEGER"},
+            ],
+            "rows": [{"country": "US", "views": 20}],
+        })
+        build_data_api.assert_not_called()
+
+    @patch("yt_tools.cli.build_data_api")
+    @patch("yt_tools.cli.build_analytics_api")
+    @patch("yt_tools.cli.load_authorized_credentials")
+    def test_analytics_query_explicitly_enriches_video_rows_with_current_metadata(
+        self,
+        load_credentials,
+        build_analytics_api,
+        build_data_api,
+    ):
+        analytics_api = MagicMock()
+        build_analytics_api.return_value = analytics_api
+        analytics_api.reports.return_value.query.return_value.execute.return_value = {
+            "columnHeaders": [
+                {"name": "video", "columnType": "DIMENSION", "dataType": "STRING"},
+                {"name": "views", "columnType": "METRIC", "dataType": "INTEGER"},
+            ],
+            "rows": [["video-1", 20]],
+        }
+        data_api = MagicMock()
+        build_data_api.return_value = data_api
+        data_api.videos.return_value.list.return_value.execute.return_value = {
+            "items": [{
+                "id": "video-1",
+                "snippet": {"title": "Current title"},
+                "contentDetails": {"duration": "PT1M"},
+                "status": {"privacyStatus": "public"},
+            }]
+        }
+
+        result = cli.main([
+            "analytics", "query",
+            "--channel", "MINE",
+            "--start-date", "2026-08-01",
+            "--end-date", "2026-08-02",
+            "--metrics", "views",
+            "--dimensions", "video",
+            "--enrich-video-metadata",
         ])
+
+        self.assertEqual(result, 0)
+        build_data_api.assert_called_once_with(load_credentials.return_value)
+        self.assertEqual(json.loads(sys.stdout.getvalue())["rows"], [{
+            "video": "video-1",
+            "views": 20,
+            "videoMetadata": {
+                "availability": "available",
+                "snippet": {"title": "Current title"},
+                "contentDetails": {"duration": "PT1M"},
+                "status": {"privacyStatus": "public"},
+            },
+        }])
+
+    @patch("yt_tools.cli.build_data_api")
+    @patch("yt_tools.cli.build_analytics_api")
+    @patch("yt_tools.cli.load_authorized_credentials")
+    def test_metadata_enrichment_requires_the_video_dimension_before_api_access(
+        self,
+        load_credentials,
+        build_analytics_api,
+        build_data_api,
+    ):
+        result = cli.main([
+            "analytics", "query",
+            "--channel", "MINE",
+            "--start-date", "2026-08-01",
+            "--end-date", "2026-08-02",
+            "--metrics", "views",
+            "--dimensions", "day",
+            "--enrich-video-metadata",
+        ])
+
+        self.assertEqual(result, 1)
+        self.assertIn(
+            "--enrich-video-metadata requires the video dimension",
+            sys.stderr.getvalue(),
+        )
+        load_credentials.assert_not_called()
+        build_analytics_api.assert_not_called()
+        build_data_api.assert_not_called()
+
+    @patch("yt_tools.cli.build_data_api")
+    @patch("yt_tools.cli.build_analytics_api")
+    @patch("yt_tools.cli.load_authorized_credentials")
+    def test_metadata_request_failure_is_actionable_and_returns_no_partial_result(
+        self,
+        load_credentials,
+        build_analytics_api,
+        build_data_api,
+    ):
+        analytics_api = MagicMock()
+        build_analytics_api.return_value = analytics_api
+        analytics_api.reports.return_value.query.return_value.execute.return_value = {
+            "columnHeaders": [
+                {"name": "video", "columnType": "DIMENSION", "dataType": "STRING"},
+                {"name": "views", "columnType": "METRIC", "dataType": "INTEGER"},
+            ],
+            "rows": [["video-1", 20]],
+        }
+        data_api = MagicMock()
+        build_data_api.return_value = data_api
+        data_api.videos.return_value.list.return_value.execute.side_effect = HttpError(
+            MagicMock(status=403, reason="Forbidden"),
+            json.dumps({
+                "error": {
+                    "message": "Data API quota exceeded.",
+                    "errors": [{"reason": "quotaExceeded"}],
+                }
+            }).encode(),
+        )
+
+        result = cli.main([
+            "analytics", "query",
+            "--channel", "MINE",
+            "--start-date", "2026-08-01",
+            "--end-date", "2026-08-02",
+            "--metrics", "views",
+            "--dimensions", "video",
+            "--enrich-video-metadata",
+        ])
+
+        self.assertEqual(result, 1)
+        self.assertEqual(sys.stdout.getvalue(), "")
+        self.assertIn("YouTube Data API request failed (403)", sys.stderr.getvalue())
+        self.assertIn("Data API quota exceeded.", sys.stderr.getvalue())
+        self.assertIn("quotaExceeded", sys.stderr.getvalue())
+        self.assertNotIn("Unexpected", sys.stderr.getvalue())
 
     @patch("yt_tools.cli.build_analytics_api")
     @patch("yt_tools.cli.load_authorized_credentials")
@@ -376,6 +519,29 @@ class TestCLI(unittest.TestCase):
             ["2026-08-01", "20", ""],
             ["2026-08-02", "", "quoted, value"],
         ])
+
+    def test_enriched_csv_serializes_video_metadata_as_json(self):
+        cli.print_analytics_csv({
+            "columns": [
+                {"name": "video"},
+                {"name": "videoMetadata"},
+            ],
+            "rows": [{
+                "video": "video-1",
+                "videoMetadata": {
+                    "availability": "available",
+                    "snippet": {"title": "Current title"},
+                },
+            }],
+        })
+
+        rows = list(csv.reader(StringIO(sys.stdout.getvalue())))
+        self.assertEqual(rows[0], ["video", "videoMetadata"])
+        self.assertEqual(rows[1][0], "video-1")
+        self.assertEqual(json.loads(rows[1][1]), {
+            "availability": "available",
+            "snippet": {"title": "Current title"},
+        })
 
     @patch("yt_tools.cli.build_analytics_api")
     @patch("yt_tools.cli.load_authorized_credentials")

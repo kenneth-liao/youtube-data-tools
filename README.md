@@ -94,6 +94,25 @@ headers only. A successful empty JSON result has an empty `rows` array and a
 `null` returned range. Google determines which metrics, dimensions, and filters
 are compatible.
 
+For a query with the `video` dimension, explicitly request current video
+metadata through the authorized YouTube Data API:
+
+```bash
+yt-tools analytics query \
+  --channel MINE \
+  --start-date 2026-08-01 \
+  --end-date 2026-08-18 \
+  --metrics views \
+  --dimensions video \
+  --enrich-video-metadata
+```
+
+Each row keeps its canonical `video` ID and gains `videoMetadata`. Available
+metadata includes current snippet, content details, and status. A missing,
+deleted, or inaccessible video has `{"availability": "unavailable"}` instead.
+Without this option, no Data API metadata request occurs and the result contract
+is unchanged. In CSV output, `videoMetadata` is a JSON value in its own column.
+
 ## Usage
 
 Each subcommand also supports a `-h` or `--help` option for detailed usage information (e.g., `yt-tools search -h`).
