@@ -18,15 +18,15 @@ def build_data_api(credentials):
         ) from error
 
 
-def enrich_video_rows(api, result: dict) -> dict:
-    """Add current Data API metadata to analytics rows containing video IDs."""
-    video_ids = list(dict.fromkeys(row["video"] for row in result["rows"]))
+def get_video_metadata(api, video_ids: list[str]) -> dict[str, dict]:
+    """Return current authorized Data API metadata keyed by video ID."""
+    unique_ids = list(dict.fromkeys(video_ids))
     videos = {}
     try:
-        for start in range(0, len(video_ids), 50):
+        for start in range(0, len(unique_ids), 50):
             response = api.videos().list(
                 part="snippet,contentDetails,status",
-                id=",".join(video_ids[start:start + 50]),
+                id=",".join(unique_ids[start:start + 50]),
             ).execute()
             videos.update((item["id"], item) for item in response.get("items", []))
     except HttpError as error:
@@ -37,19 +37,31 @@ def enrich_video_rows(api, result: dict) -> dict:
         raise VideoMetadataError(
             f"YouTube Data API request failed: {error}"
         ) from error
-    enriched_rows = []
-    for row in result["rows"]:
-        item = videos.get(row["video"])
-        metadata = {"availability": "available"}
+
+    metadata = {}
+    for video_id in unique_ids:
+        item = videos.get(video_id)
         if item:
-            metadata.update(
-                (name, item[name])
-                for name in ("snippet", "contentDetails", "status")
-                if name in item
-            )
+            metadata[video_id] = {
+                "availability": "available",
+                **{
+                    name: item[name]
+                    for name in ("snippet", "contentDetails", "status")
+                    if name in item
+                },
+            }
         else:
-            metadata = {"availability": "unavailable"}
-        enriched_rows.append({**row, "videoMetadata": metadata})
+            metadata[video_id] = {"availability": "unavailable"}
+    return metadata
+
+
+def enrich_video_rows(api, result: dict) -> dict:
+    """Add current Data API metadata to analytics rows containing video IDs."""
+    metadata = get_video_metadata(api, [row["video"] for row in result["rows"]])
+    enriched_rows = [
+        {**row, "videoMetadata": metadata[row["video"]]}
+        for row in result["rows"]
+    ]
     return {
         **result,
         "columns": [

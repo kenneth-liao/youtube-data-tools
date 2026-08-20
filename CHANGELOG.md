@@ -17,6 +17,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   results. (#4)
 - Add explicit enrichment of analytics video rows with current authorized
   YouTube Data API metadata. (#5)
+- Add predefined channel and owned-video analytics snapshots with authoritative
+  period aggregates, daily trends, and actual returned ranges. (#6)
 
 ### Fixed
 

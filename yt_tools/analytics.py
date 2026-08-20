@@ -16,13 +16,20 @@ class AnalyticsQueryError(Exception):
     """An actionable failure returned by the YouTube Analytics API."""
 
 
-def _parse_date(value: str, field: str) -> date:
+def parse_date(value: str, field: str) -> date:
     if not isinstance(value, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
         raise AnalyticsInputError(f"{field} must use YYYY-MM-DD format.")
     try:
         return date.fromisoformat(value)
     except ValueError as error:
         raise AnalyticsInputError(f"{field} must be a valid calendar date.") from error
+
+
+def normalize_channel(value: str) -> str:
+    channel = value.removeprefix("channel==") if isinstance(value, str) else ""
+    if channel != "MINE" and not re.fullmatch(r"UC[A-Za-z0-9_-]{22}", channel):
+        raise AnalyticsInputError("channel must be MINE or a YouTube channel ID.")
+    return f"channel=={channel}"
 
 
 def _validate_text(value: str | None, field: str, *, required: bool = False) -> None:
@@ -54,19 +61,12 @@ class AnalyticsQuery:
     currency: str | None = None
 
     def __post_init__(self) -> None:
-        start = _parse_date(self.start_date, "start date")
-        end = _parse_date(self.end_date, "end date")
+        start = parse_date(self.start_date, "start date")
+        end = parse_date(self.end_date, "end date")
         if start > end:
             raise AnalyticsInputError("start date must not be after end date.")
 
-        channel = (
-            self.channel.removeprefix("channel==")
-            if isinstance(self.channel, str)
-            else ""
-        )
-        if channel != "MINE" and not re.fullmatch(r"UC[A-Za-z0-9_-]{22}", channel):
-            raise AnalyticsInputError("channel must be MINE or a YouTube channel ID.")
-        object.__setattr__(self, "channel", f"channel=={channel}")
+        object.__setattr__(self, "channel", normalize_channel(self.channel))
 
         _validate_list(self.metrics, "metrics", required=True)
         _validate_list(self.dimensions, "dimensions")

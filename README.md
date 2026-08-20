@@ -113,6 +113,45 @@ deleted, or inaccessible video has `{"availability": "unavailable"}` instead.
 Without this option, no Data API metadata request occurs and the result contract
 is unchanged. In CSV output, `videoMetadata` is a JSON value in its own column.
 
+## Retrieve a performance snapshot
+
+Retrieve the authorized channel's predefined performance view:
+
+```bash
+yt-tools analytics snapshot --channel MINE
+```
+
+Without dates, the snapshot requests the previous 28 completed reporting days
+in YouTube's Pacific-time calendar, ending yesterday. Override the range by
+providing both dates:
+
+```bash
+yt-tools analytics snapshot \
+  --channel MINE \
+  --start-date 2026-08-01 \
+  --end-date 2026-08-18
+```
+
+Select one owned video with `--video <video-id>`. Video snapshots automatically
+include current authorized Data API metadata while preserving the selected
+video ID:
+
+```bash
+yt-tools analytics snapshot --channel MINE --video dQw4w9WgXcQ
+```
+
+Channel snapshots include views, estimated watch minutes, average view duration,
+average percentage viewed, and subscribers gained and lost. Video snapshots
+omit subscriber metrics because YouTube does not support them for that target.
+The command gets period totals and averages from an aggregate Analytics API
+query and daily trends from a separate `day` query; it does not calculate
+aggregates from daily values.
+
+JSON output identifies the requested range and the actual range represented by
+daily rows. Processing delays can make these ranges differ. An empty period has
+`null` period values, an empty daily row array, and a `null` returned range; the
+command does not create zero values or prose analysis.
+
 ## Usage
 
 Each subcommand also supports a `-h` or `--help` option for detailed usage information (e.g., `yt-tools search -h`).
