@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "youtube-data-tools"
-version = "0.6.0"
+version = "0.7.0"
 description = "CLI for public YouTube data and authorized channel analytics"
 authors = [
     { name = "Kenneth Liao", email = "kennyliao@theailaunchpad.io" },

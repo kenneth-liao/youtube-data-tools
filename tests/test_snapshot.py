@@ -45,13 +45,30 @@ class TestAnalyticsSnapshotCLI(unittest.TestCase):
                 ],
                 "rows": [["2026-07-25", 20, 50.0], ["2026-08-17", 30, 75.0]],
             },
+            {
+                "columnHeaders": [
+                    {"name": "views", "columnType": "METRIC", "dataType": "INTEGER"},
+                    {"name": "averageViewPercentage", "columnType": "METRIC", "dataType": "FLOAT"},
+                ],
+                "rows": [[40, 50.0]],
+            },
+            {
+                "columnHeaders": [
+                    {"name": "day", "columnType": "DIMENSION", "dataType": "STRING"},
+                    {"name": "views", "columnType": "METRIC", "dataType": "INTEGER"},
+                    {"name": "averageViewPercentage", "columnType": "METRIC", "dataType": "FLOAT"},
+                ],
+                "rows": [["2026-06-25", 40, 50.0]],
+            },
         ]
 
         result = cli.main(["analytics", "snapshot", "--channel", "MINE"])
 
         self.assertEqual(result, 0)
-        self.assertEqual(api.reports.return_value.query.call_count, 2)
-        aggregate_call, daily_call = api.reports.return_value.query.call_args_list
+        self.assertEqual(api.reports.return_value.query.call_count, 4)
+        aggregate_call, daily_call, comparison_aggregate_call, comparison_daily_call = (
+            api.reports.return_value.query.call_args_list
+        )
         self.assertEqual(aggregate_call.kwargs["startDate"], "2026-07-23")
         self.assertEqual(aggregate_call.kwargs["endDate"], "2026-08-19")
         self.assertNotIn("dimensions", aggregate_call.kwargs)
@@ -59,6 +76,9 @@ class TestAnalyticsSnapshotCLI(unittest.TestCase):
         self.assertIn("subscribersLost", aggregate_call.kwargs["metrics"])
         self.assertEqual(daily_call.kwargs["dimensions"], "day")
         self.assertEqual(daily_call.kwargs["sort"], "day")
+        for call in (comparison_aggregate_call, comparison_daily_call):
+            self.assertEqual(call.kwargs["startDate"], "2026-06-25")
+            self.assertEqual(call.kwargs["endDate"], "2026-07-22")
         output = json.loads(sys.stdout.getvalue())
         self.assertEqual(output["requestedRange"], {
             "startDate": "2026-07-23",
@@ -76,6 +96,140 @@ class TestAnalyticsSnapshotCLI(unittest.TestCase):
             {"day": "2026-07-25", "views": 20, "averageViewPercentage": 50.0},
             {"day": "2026-08-17", "views": 30, "averageViewPercentage": 75.0},
         ])
+        self.assertEqual(output["comparison"]["requestedRange"], {
+            "startDate": "2026-06-25",
+            "endDate": "2026-07-22",
+        })
+        self.assertEqual(output["comparison"]["returnedRange"], {
+            "startDate": "2026-06-25",
+            "endDate": "2026-06-25",
+        })
+        self.assertEqual(output["comparison"]["period"]["values"], {
+            "views": 40,
+            "averageViewPercentage": 50.0,
+        })
+        self.assertEqual(output["changes"], {
+            "views": {"absolute": 10, "percentage": 25.0},
+            "averageViewPercentage": {"absolute": 12.5, "percentage": 25.0},
+        })
+
+    @patch("yt_tools.cli.build_analytics_api")
+    @patch("yt_tools.cli.load_authorized_credentials")
+    def test_no_comparison_skips_preceding_period_requests(
+        self,
+        load_credentials,
+        build_api,
+    ):
+        api = MagicMock()
+        build_api.return_value = api
+        api.reports.return_value.query.return_value.execute.side_effect = [
+            {
+                "columnHeaders": [
+                    {"name": "views", "columnType": "METRIC", "dataType": "INTEGER"},
+                ],
+                "rows": [[12]],
+            },
+            {
+                "columnHeaders": [
+                    {"name": "day", "columnType": "DIMENSION", "dataType": "STRING"},
+                    {"name": "views", "columnType": "METRIC", "dataType": "INTEGER"},
+                ],
+                "rows": [["2026-08-01", 12]],
+            },
+        ]
+
+        result = cli.main([
+            "analytics", "snapshot",
+            "--channel", "MINE",
+            "--start-date", "2026-08-01",
+            "--end-date", "2026-08-01",
+            "--no-comparison",
+        ])
+
+        self.assertEqual(result, 0)
+        self.assertEqual(api.reports.return_value.query.call_count, 2)
+        output = json.loads(sys.stdout.getvalue())
+        self.assertNotIn("comparison", output)
+        self.assertNotIn("changes", output)
+
+    @patch("yt_tools.cli.build_analytics_api")
+    @patch("yt_tools.cli.load_authorized_credentials")
+    def test_zero_or_absent_baselines_have_undefined_percentage_without_hiding_missing_rows(
+        self,
+        load_credentials,
+        build_api,
+    ):
+        api = MagicMock()
+        build_api.return_value = api
+        aggregate_columns = [
+            {"name": "views", "columnType": "METRIC", "dataType": "INTEGER"},
+            {"name": "estimatedMinutesWatched", "columnType": "METRIC", "dataType": "INTEGER"},
+        ]
+        daily_columns = [
+            {"name": "day", "columnType": "DIMENSION", "dataType": "STRING"},
+            *aggregate_columns,
+        ]
+        api.reports.return_value.query.return_value.execute.side_effect = [
+            {"columnHeaders": aggregate_columns, "rows": [[0, 10]]},
+            {"columnHeaders": daily_columns, "rows": [["2026-08-01", 0, 10]]},
+            {"columnHeaders": aggregate_columns, "rows": [[0, None]]},
+            {"columnHeaders": daily_columns, "rows": []},
+        ]
+
+        result = cli.main([
+            "analytics", "snapshot",
+            "--channel", "MINE",
+            "--start-date", "2026-08-01",
+            "--end-date", "2026-08-01",
+        ])
+
+        self.assertEqual(result, 0)
+        output = json.loads(sys.stdout.getvalue())
+        self.assertEqual(output["period"]["values"]["views"], 0)
+        self.assertEqual(output["daily"]["rows"][0]["views"], 0)
+        self.assertIsNone(output["comparison"]["returnedRange"])
+        self.assertEqual(output["comparison"]["daily"]["rows"], [])
+        self.assertEqual(output["changes"], {
+            "views": {"absolute": 0, "percentage": None},
+            "estimatedMinutesWatched": {"absolute": None, "percentage": None},
+        })
+
+    @patch("yt_tools.cli.build_analytics_api")
+    @patch("yt_tools.cli.load_authorized_credentials")
+    def test_missing_comparison_period_has_explicit_undefined_changes(
+        self,
+        load_credentials,
+        build_api,
+    ):
+        api = MagicMock()
+        build_api.return_value = api
+        aggregate_columns = [
+            {"name": "views", "columnType": "METRIC", "dataType": "INTEGER"},
+        ]
+        daily_columns = [
+            {"name": "day", "columnType": "DIMENSION", "dataType": "STRING"},
+            *aggregate_columns,
+        ]
+        api.reports.return_value.query.return_value.execute.side_effect = [
+            {"columnHeaders": aggregate_columns, "rows": [[10]]},
+            {"columnHeaders": daily_columns, "rows": [["2026-08-01", 10]]},
+            {"columnHeaders": aggregate_columns, "rows": []},
+            {"columnHeaders": daily_columns, "rows": []},
+        ]
+
+        result = cli.main([
+            "analytics", "snapshot",
+            "--channel", "MINE",
+            "--start-date", "2026-08-01",
+            "--end-date", "2026-08-01",
+        ])
+
+        self.assertEqual(result, 0)
+        output = json.loads(sys.stdout.getvalue())
+        self.assertIsNone(output["comparison"]["period"]["values"])
+        self.assertEqual(output["changes"], {
+            "views": {"absolute": None, "percentage": None},
+        })
 
     @patch("yt_tools.cli.build_analytics_api")
     @patch("yt_tools.cli.load_authorized_credentials")
@@ -157,6 +311,19 @@ class TestAnalyticsSnapshotCLI(unittest.TestCase):
                 ],
                 "rows": [["2026-08-01", 12]],
             },
+            {
+                "columnHeaders": [
+                    {"name": "views", "columnType": "METRIC", "dataType": "INTEGER"},
+                ],
+                "rows": [[8]],
+            },
+            {
+                "columnHeaders": [
+                    {"name": "day", "columnType": "DIMENSION", "dataType": "STRING"},
+                    {"name": "views", "columnType": "METRIC", "dataType": "INTEGER"},
+                ],
+                "rows": [["2026-07-31", 8]],
+            },
         ]
         data_api = MagicMock()
         build_data_api.return_value = data_api
@@ -178,9 +345,14 @@ class TestAnalyticsSnapshotCLI(unittest.TestCase):
         ])
 
         self.assertEqual(result, 0)
-        for call in analytics_api.reports.return_value.query.call_args_list:
+        calls = analytics_api.reports.return_value.query.call_args_list
+        for call in calls[:2]:
             self.assertEqual(call.kwargs["startDate"], "2026-08-01")
             self.assertEqual(call.kwargs["endDate"], "2026-08-01")
+        for call in calls[2:]:
+            self.assertEqual(call.kwargs["startDate"], "2026-07-31")
+            self.assertEqual(call.kwargs["endDate"], "2026-07-31")
+        for call in calls:
             self.assertEqual(call.kwargs["filters"], "video==abcdefghijk")
             self.assertNotIn("subscribersGained", call.kwargs["metrics"])
             self.assertNotIn("subscribersLost", call.kwargs["metrics"])
@@ -206,6 +378,19 @@ class TestAnalyticsSnapshotCLI(unittest.TestCase):
         api = MagicMock()
         build_api.return_value = api
         api.reports.return_value.query.return_value.execute.side_effect = [
+            {
+                "columnHeaders": [
+                    {"name": "views", "columnType": "METRIC", "dataType": "INTEGER"},
+                ],
+                "rows": [],
+            },
+            {
+                "columnHeaders": [
+                    {"name": "day", "columnType": "DIMENSION", "dataType": "STRING"},
+                    {"name": "views", "columnType": "METRIC", "dataType": "INTEGER"},
+                ],
+                "rows": [],
+            },
             {
                 "columnHeaders": [
                     {"name": "views", "columnType": "METRIC", "dataType": "INTEGER"},

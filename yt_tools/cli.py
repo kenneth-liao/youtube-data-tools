@@ -349,6 +349,7 @@ def cmd_analytics_snapshot(args: argparse.Namespace) -> int:
             end_date=end_date,
             video=args.video,
             data_api=build_data_api(credentials) if args.video else None,
+            comparison_enabled=not args.no_comparison,
         )
     except (
         AnalyticsInputError,
@@ -544,6 +545,7 @@ Optional parameters:
   --start-date <YYYY-MM-DD>     First requested reporting day
   --end-date <YYYY-MM-DD>       Last requested reporting day
   --token-file <path>           Stored authorization override
+  --no-comparison               Skip the preceding-period comparison
 """,
     "docs": """
 Show the full documentation.
@@ -691,6 +693,7 @@ def build_parser() -> argparse.ArgumentParser:
     analytics_snapshot.add_argument("--start-date")
     analytics_snapshot.add_argument("--end-date")
     analytics_snapshot.add_argument("--token-file")
+    analytics_snapshot.add_argument("--no-comparison", action="store_true")
     analytics_snapshot.set_defaults(func=cmd_analytics_snapshot)
 
     # Docs
