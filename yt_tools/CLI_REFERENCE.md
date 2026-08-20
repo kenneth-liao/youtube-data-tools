@@ -218,6 +218,7 @@ yt-tools analytics snapshot --channel MINE [options]
 - `--start-date <YYYY-MM-DD>`: First requested reporting day; requires `--end-date`
 - `--end-date <YYYY-MM-DD>`: Last requested reporting day; requires `--start-date`
 - `--token-file <path>`: Stored authorization override
+- `--no-comparison`: Skip the preceding-period comparison and its API requests
 
 Without explicit dates, the command requests the previous 28 completed
 Pacific-time reporting days ending yesterday. Channel snapshots include views,
@@ -227,10 +228,16 @@ metrics and automatically include current Data API metadata while preserving
 the selected video ID.
 
 The JSON result contains the target, requested and actual returned ranges,
-period values, and daily rows. Period totals and averages come from a separate
-aggregate API query rather than calculations over daily values. An empty period
-uses `null` period values, an empty daily row array, and a `null` returned range;
-it does not contain fabricated zero values or prose analysis.
+period values, and daily rows. By default, a separate `comparison` object
+contains the requested range, returned range, period values, and daily rows for
+the immediately preceding equal-length period. The `changes` object contains
+each comparable metric's absolute change (`current - preceding`) and percentage
+change (`(current - preceding) / preceding * 100`). An absent or zero preceding
+value makes the percentage `null`.
+Period totals and averages come from separate aggregate API queries rather than
+calculations over daily values. An empty period uses `null` period values, an
+empty daily row array, and a `null` returned range; it does not contain
+fabricated zero values or prose analysis.
 
 ---
 

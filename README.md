@@ -147,10 +147,19 @@ The command gets period totals and averages from an aggregate Analytics API
 query and daily trends from a separate `day` query; it does not calculate
 aggregates from daily values.
 
-JSON output identifies the requested range and the actual range represented by
-daily rows. Processing delays can make these ranges differ. An empty period has
-`null` period values, an empty daily row array, and a `null` returned range; the
-command does not create zero values or prose analysis.
+By default, the snapshot also retrieves the immediately preceding period with
+the same inclusive day count. The `comparison` object keeps that period's
+requested range, returned range, aggregate values, and daily rows separate from
+the current period. The `changes` object gives each comparable metric's
+`absolute` change (`current - preceding`) and `percentage` change
+(`(current - preceding) / preceding * 100`). Percentage is `null` when the
+preceding value is zero or absent. Use `--no-comparison` to omit comparison output and
+skip both preceding-period API requests.
+
+JSON output identifies each requested range and the actual range represented by
+its daily rows. Processing delays can make these ranges differ. An empty period
+has `null` period values, an empty daily row array, and a `null` returned range;
+the command does not create zero values or prose analysis.
 
 ## Usage
 
