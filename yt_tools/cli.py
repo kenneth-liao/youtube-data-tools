@@ -6,7 +6,19 @@ from importlib import metadata
 from typing import List, Optional, Any
 from dotenv import load_dotenv, find_dotenv
 
-from yt_tools.auth import AuthorizationError, authorize, resolve_credential_paths
+from yt_tools.analytics import (
+    AnalyticsInputError,
+    AnalyticsQuery,
+    AnalyticsQueryError,
+    build_analytics_api,
+    query_channel_analytics,
+)
+from yt_tools.auth import (
+    AuthorizationError,
+    authorize,
+    load_authorized_credentials,
+    resolve_credential_paths,
+)
 from yt_tools.core import YouTubeService
 
 def _load_api_key_environment() -> None:
@@ -254,6 +266,31 @@ def cmd_authorize(args: argparse.Namespace) -> int:
     print(f"Authorization complete. Credentials stored in {paths.token_file.parent}")
     return 0
 
+
+def cmd_analytics_query(args: argparse.Namespace) -> int:
+    """Run a synchronous analytics query for an authorized channel."""
+    try:
+        query = AnalyticsQuery(
+            channel=args.channel,
+            start_date=args.start_date,
+            end_date=args.end_date,
+            metrics=args.metrics,
+            dimensions=args.dimensions,
+            filters=args.filters,
+            sort=args.sort,
+            max_results=args.max_results,
+            start_index=args.start_index,
+            currency=args.currency,
+        )
+        token_file = resolve_credential_paths(token_file=args.token_file).token_file
+        credentials = load_authorized_credentials(token_file)
+        result = query_channel_analytics(build_analytics_api(credentials), query)
+    except (AnalyticsInputError, AnalyticsQueryError, AuthorizationError) as error:
+        raise ToolboxError(str(error)) from error
+    print_json(result)
+    return 0
+
+
 def cmd_docs(args: argparse.Namespace) -> int:
     """Display full CLI documentation from CLI_REFERENCE.md."""
     try:
@@ -283,6 +320,7 @@ Commands:
   related      Get related videos
   trending     Get trending videos
   authorize    Authorize access to an owned YouTube channel
+  analytics    Query analytics for an authorized channel
   docs         Show full documentation
 
 Environment Variables:
@@ -398,6 +436,30 @@ Options:
   --client-config-file <path>   Stored client configuration destination
   --token-file <path>           Stored refreshable token destination
 """,
+    "analytics": """
+Query analytics for an authorized channel.
+
+Usage:
+  yt-tools analytics query [options]
+""",
+    "analytics-query": """
+Run a synchronous YouTube Analytics API v2 channel query.
+
+Required options:
+  --channel <MINE|channel-id>   Authorized channel identity
+  --start-date <YYYY-MM-DD>     First requested reporting day
+  --end-date <YYYY-MM-DD>       Last requested reporting day
+  --metrics <names>             Comma-separated metric names
+
+Optional parameters:
+  --dimensions <names>          Comma-separated dimension names
+  --filters <expression>        Analytics API filter expression
+  --sort <names>                Comma-separated sort fields
+  --max-results <int>           Maximum rows to return
+  --start-index <int>           One-based first row
+  --currency <code>             Currency for monetary metrics
+  --token-file <path>           Stored authorization override
+""",
     "docs": """
 Show the full documentation.
 
@@ -502,6 +564,35 @@ def build_parser() -> argparse.ArgumentParser:
     auth.add_argument("--client-config-file", help="Stored client configuration destination")
     auth.add_argument("--token-file", help="Stored refreshable token destination")
     auth.set_defaults(func=cmd_authorize)
+
+    # Analytics
+    analytics = sub.add_parser(
+        "analytics",
+        help="Query analytics for an authorized channel",
+        custom_help_text=COMMAND_DOCS["analytics"],
+    )
+    analytics_sub = analytics.add_subparsers(
+        dest="analytics_cmd",
+        required=True,
+        parser_class=CustomHelpParser,
+    )
+    analytics_query = analytics_sub.add_parser(
+        "query",
+        help="Run a synchronous channel analytics query",
+        custom_help_text=COMMAND_DOCS["analytics-query"],
+    )
+    analytics_query.add_argument("--channel", required=True)
+    analytics_query.add_argument("--start-date", required=True)
+    analytics_query.add_argument("--end-date", required=True)
+    analytics_query.add_argument("--metrics", required=True)
+    analytics_query.add_argument("--dimensions")
+    analytics_query.add_argument("--filters")
+    analytics_query.add_argument("--sort")
+    analytics_query.add_argument("--max-results", type=int)
+    analytics_query.add_argument("--start-index", type=int)
+    analytics_query.add_argument("--currency")
+    analytics_query.add_argument("--token-file")
+    analytics_query.set_defaults(func=cmd_analytics_query)
 
     # Docs
     doc = sub.add_parser("docs", help="Display full documentation", custom_help_text=COMMAND_DOCS["docs"])
