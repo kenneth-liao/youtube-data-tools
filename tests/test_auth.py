@@ -210,7 +210,7 @@ class TestAuthorization(unittest.TestCase):
             ) as create_flow:
                 authorize(source, client_config, token)
 
-            create_flow.assert_called_once_with(str(client_config), scopes=REQUIRED_SCOPES)
+            create_flow.assert_called_once_with(str(source), scopes=REQUIRED_SCOPES)
             flow.run_local_server.assert_called_once_with(
                 port=0,
                 access_type="offline",
@@ -242,12 +242,15 @@ class TestAuthorization(unittest.TestCase):
 
             self.assertFalse(token.exists())
 
-    def test_denied_consent_returns_an_actionable_error_without_storing_a_token(self):
+    def test_denied_consent_preserves_existing_stored_credentials(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             source = root / "selected-client.json"
             source.write_text(json.dumps(client_payload()), encoding="utf-8")
+            client_config = root / "client.json"
+            client_config.write_text("existing-client-config", encoding="utf-8")
             token = root / "token.json"
+            token.write_text("existing-token", encoding="utf-8")
             flow = MagicMock()
             flow.run_local_server.side_effect = AccessDeniedError(
                 description="provider leaked secret-value"
@@ -260,12 +263,13 @@ class TestAuthorization(unittest.TestCase):
                 ),
                 self.assertRaises(AuthorizationError) as raised,
             ):
-                authorize(source, root / "client.json", token)
+                authorize(source, client_config, token)
 
             self.assertIn("denied", str(raised.exception).lower())
             self.assertIn("authorize", str(raised.exception).lower())
             self.assertNotIn("secret-value", str(raised.exception))
-            self.assertFalse(token.exists())
+            self.assertEqual(client_config.read_text(), "existing-client-config")
+            self.assertEqual(token.read_text(), "existing-token")
 
     def test_authorize_stores_files_with_owner_only_access(self):
         with tempfile.TemporaryDirectory() as directory:

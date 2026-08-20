@@ -148,11 +148,10 @@ def authorize(
         )
 
     payload = _read_client_config(client_secrets)
-    _write_private(client_config_file, json.dumps(payload))
 
     try:
         flow = InstalledAppFlow.from_client_secrets_file(
-            str(client_config_file), scopes=REQUIRED_SCOPES
+            str(client_secrets), scopes=REQUIRED_SCOPES
         )
         flow.run_local_server(port=0, access_type="offline", prompt="consent")
     except AccessDeniedError as error:
@@ -171,4 +170,6 @@ def authorize(
             "Google did not return a refreshable token. "
             "Run yt-tools authorize again and complete consent."
         )
+
+    _write_private(client_config_file, json.dumps(payload))
     _write_private(token_file, flow.credentials.to_json())
