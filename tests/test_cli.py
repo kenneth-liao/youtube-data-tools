@@ -2,9 +2,11 @@ import argparse
 import sys
 import unittest
 from io import StringIO
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from yt_tools import cli
+from yt_tools.auth import AuthorizationError
 
 class TestCLI(unittest.TestCase):
     def setUp(self):
@@ -244,6 +246,61 @@ class TestCLI(unittest.TestCase):
         mock_service.get_trending_videos.assert_called_with("US", 10)
         output = sys.stdout.getvalue()
         self.assertIn("Trending Now", output)
+
+    @patch("yt_tools.cli._load_api_key_environment")
+    @patch("yt_tools.cli.authorize")
+    def test_authorize_does_not_search_dotenv_locations(self, mock_authorize, mock_load_environment):
+        result = cli.main([
+            "authorize",
+            "--client-secrets", "/source/client.json",
+        ])
+
+        self.assertEqual(result, 0)
+        mock_load_environment.assert_not_called()
+
+    @patch("yt_tools.cli.authorize")
+    def test_authorize_command_returns_an_actionable_nonzero_error(self, mock_authorize):
+        mock_authorize.side_effect = AuthorizationError("Authorization was denied. Try again.")
+
+        result = cli.main([
+            "authorize",
+            "--client-secrets", "/source/client.json",
+        ])
+
+        self.assertEqual(result, 1)
+        self.assertIn("Authorization was denied. Try again.", sys.stderr.getvalue())
+        self.assertNotIn("Unexpected", sys.stderr.getvalue())
+
+    @patch("yt_tools.cli.authorize")
+    def test_authorize_command_stores_credentials_at_resolved_destinations(self, mock_authorize):
+        result = cli.main([
+            "authorize",
+            "--client-secrets", "/source/client.json",
+            "--client-config-file", "/stored/client.json",
+            "--token-file", "/stored/token.json",
+        ])
+
+        self.assertEqual(result, 0)
+        mock_authorize.assert_called_once_with(
+            "/source/client.json",
+            Path("/stored/client.json"),
+            Path("/stored/token.json"),
+        )
+        self.assertIn("Authorization complete", sys.stdout.getvalue())
+
+    def test_authorize_command_accepts_source_and_destination_overrides(self):
+        args = cli.build_parser().parse_args([
+            "authorize",
+            "--client-secrets", "/source/client.json",
+            "--client-config-file", "/stored/client.json",
+            "--token-file", "/stored/token.json",
+        ])
+
+        self.assertEqual(args.cmd, "authorize")
+        self.assertEqual(args.client_secrets, "/source/client.json")
+        self.assertEqual(args.client_config_file, "/stored/client.json")
+        self.assertEqual(args.token_file, "/stored/token.json")
+        self.assertIs(args.func, cli.cmd_authorize)
 
     def test_version_command(self):
         # We can't easily test the version flag as it calls sys.exit
