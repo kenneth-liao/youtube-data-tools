@@ -1,4 +1,5 @@
 import argparse
+import csv
 import json
 import os
 import sys
@@ -62,6 +63,15 @@ def _get_service() -> YouTubeService:
 def print_json(data: Any):
     """Print data as JSON."""
     print(json.dumps(data, indent=2, ensure_ascii=False))
+
+
+def print_analytics_csv(result: dict) -> None:
+    """Print an analytics query result as CSV."""
+    names = [column["name"] for column in result["columns"]]
+    writer = csv.writer(sys.stdout, lineterminator="\n")
+    writer.writerow(names)
+    writer.writerows([row[name] for name in names] for row in result["rows"])
+
 
 def cmd_search(args: argparse.Namespace) -> int:
     service = _get_service()
@@ -287,7 +297,10 @@ def cmd_analytics_query(args: argparse.Namespace) -> int:
         result = query_channel_analytics(build_analytics_api(credentials), query)
     except (AnalyticsInputError, AnalyticsQueryError, AuthorizationError) as error:
         raise ToolboxError(str(error)) from error
-    print_json(result)
+    if args.format == "csv":
+        print_analytics_csv(result)
+    else:
+        print_json(result)
     return 0
 
 
@@ -459,6 +472,7 @@ Optional parameters:
   --start-index <int>           One-based first row
   --currency <code>             Currency for monetary metrics
   --token-file <path>           Stored authorization override
+  --format <json|csv>            Output format (default: json)
 """,
     "docs": """
 Show the full documentation.
@@ -592,6 +606,7 @@ def build_parser() -> argparse.ArgumentParser:
     analytics_query.add_argument("--start-index", type=int)
     analytics_query.add_argument("--currency")
     analytics_query.add_argument("--token-file")
+    analytics_query.add_argument("--format", choices=("json", "csv"), default="json")
     analytics_query.set_defaults(func=cmd_analytics_query)
 
     # Docs

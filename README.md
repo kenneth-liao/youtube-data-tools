@@ -86,11 +86,13 @@ upstream parameters are `--filters`, `--max-results`, `--start-index`, and
 For descending sorting, pass the value with an equals sign, such as
 `--sort=-views`.
 
-The command returns JSON with the requested range, the returned range when it
-can be derived from `day` rows, ordered column metadata, and rows keyed by
-column name. A successful query with no rows returns an empty `rows` array and
-a `null` returned range. Google determines which metrics, dimensions, and
-filters are compatible.
+The command returns JSON by default, with the requested range, the returned
+range when it can be derived from `day` rows, ordered column metadata, and rows
+keyed by column name. Use `--format csv` to emit the same query result as CSV;
+headers follow the returned column order, and an empty successful query emits
+headers only. A successful empty JSON result has an empty `rows` array and a
+`null` returned range. Google determines which metrics, dimensions, and filters
+are compatible.
 
 ## Usage
 
