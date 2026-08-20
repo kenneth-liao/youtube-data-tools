@@ -11,6 +11,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Add secure channel-owner OAuth authorization with canonical per-user storage,
   automation path overrides, and reusable refreshable credentials. (#2)
+- Add generic synchronous channel analytics queries with named JSON rows and
+  actionable Google API errors. (#3)
 
 ### Fixed
 

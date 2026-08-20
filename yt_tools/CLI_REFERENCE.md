@@ -1,6 +1,6 @@
 # YouTube Data Tools CLI Reference
 
-A command-line interface for interacting with the YouTube Data API.
+A command-line interface for public YouTube data and authorized channel analytics.
 
 ## Global Options
 
@@ -151,6 +151,42 @@ yt-tools authorize --client-secrets <source> [options]
 
 Without destination overrides, credentials are stored with owner-only access in
 the operating system's per-user `yt-tools` application-data directory.
+
+---
+
+### `analytics query`
+Run a synchronous YouTube Analytics API v2 query for an authorized channel.
+
+**Usage:**
+```bash
+yt-tools analytics query \
+  --channel MINE \
+  --start-date 2026-08-01 \
+  --end-date 2026-08-18 \
+  --metrics views,estimatedMinutesWatched \
+  [options]
+```
+
+**Required options:**
+- `--channel <MINE|channel-id>`: Authorized channel identity
+- `--start-date <YYYY-MM-DD>`: First requested reporting day
+- `--end-date <YYYY-MM-DD>`: Last requested reporting day
+- `--metrics <names>`: Comma-separated metric names
+
+**Optional parameters:**
+- `--dimensions <names>`: Comma-separated dimension names
+- `--filters <expression>`: Analytics API filter expression
+- `--sort <names>`: Comma-separated sort fields; use `--sort=-views` for descending fields
+- `--max-results <int>`: Maximum rows to return
+- `--start-index <int>`: One-based first row for pagination
+- `--currency <code>`: Currency for monetary metrics
+- `--token-file <path>`: Stored authorization override
+
+Output is JSON with requested and returned range metadata, ordered column
+metadata, and rows keyed by column name. The returned range is `null` when it
+cannot be derived from `day` rows. Empty successful queries return an empty
+`rows` array. Metric, dimension, and filter compatibility is determined by
+Google.
 
 ---
 

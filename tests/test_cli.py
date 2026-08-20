@@ -1,9 +1,12 @@
 import argparse
+import json
 import sys
 import unittest
 from io import StringIO
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+
+from googleapiclient.errors import HttpError
 
 from yt_tools import cli
 from yt_tools.auth import AuthorizationError
@@ -287,6 +290,143 @@ class TestCLI(unittest.TestCase):
             Path("/stored/token.json"),
         )
         self.assertIn("Authorization complete", sys.stdout.getvalue())
+
+    @patch("yt_tools.cli.build_analytics_api")
+    @patch("yt_tools.cli.load_authorized_credentials")
+    def test_analytics_query_outputs_named_json(self, load_credentials, build_api):
+        api = MagicMock()
+        build_api.return_value = api
+        api.reports.return_value.query.return_value.execute.return_value = {
+            "columnHeaders": [
+                {"name": "country", "columnType": "DIMENSION", "dataType": "STRING"},
+                {"name": "views", "columnType": "METRIC", "dataType": "INTEGER"},
+            ],
+            "rows": [["US", 20]],
+        }
+
+        result = cli.main([
+            "analytics", "query",
+            "--channel", "MINE",
+            "--start-date", "2026-08-01",
+            "--end-date", "2026-08-02",
+            "--metrics", "views",
+            "--dimensions", "country",
+            "--filters", "country==US",
+            "--sort=-views",
+            "--max-results", "50",
+            "--start-index", "1",
+            "--currency", "USD",
+            "--token-file", "/secure/token.json",
+        ])
+
+        self.assertEqual(result, 0)
+        load_credentials.assert_called_once_with(Path("/secure/token.json"))
+        build_api.assert_called_once_with(load_credentials.return_value)
+        api.reports.return_value.query.assert_called_once_with(
+            ids="channel==MINE",
+            startDate="2026-08-01",
+            endDate="2026-08-02",
+            metrics="views",
+            dimensions="country",
+            filters="country==US",
+            sort="-views",
+            maxResults=50,
+            startIndex=1,
+            currency="USD",
+        )
+        self.assertEqual(json.loads(sys.stdout.getvalue())["rows"], [
+            {"country": "US", "views": 20},
+        ])
+
+    @patch("yt_tools.cli.load_authorized_credentials")
+    def test_analytics_dates_and_metrics_are_required(self, load_credentials):
+        with self.assertRaises(SystemExit) as raised:
+            cli.main([
+                "analytics", "query",
+                "--channel", "MINE",
+            ])
+
+        self.assertNotEqual(raised.exception.code, 0)
+        self.assertIn("--start-date", sys.stderr.getvalue())
+        self.assertIn("--end-date", sys.stderr.getvalue())
+        self.assertIn("--metrics", sys.stderr.getvalue())
+        load_credentials.assert_not_called()
+
+    @patch("yt_tools.cli.build_analytics_api")
+    @patch("yt_tools.cli.load_authorized_credentials")
+    def test_malformed_analytics_input_fails_before_credentials_or_api_request(
+        self,
+        load_credentials,
+        build_api,
+    ):
+        result = cli.main([
+            "analytics", "query",
+            "--channel", "MINE",
+            "--start-date", "not-a-date",
+            "--end-date", "2026-08-02",
+            "--metrics", "views",
+        ])
+
+        self.assertEqual(result, 1)
+        self.assertIn("start date", sys.stderr.getvalue())
+        load_credentials.assert_not_called()
+        build_api.assert_not_called()
+
+    @patch("yt_tools.cli.build_analytics_api")
+    @patch("yt_tools.cli.load_authorized_credentials")
+    def test_analytics_upstream_failure_returns_nonzero_with_google_detail(
+        self,
+        load_credentials,
+        build_api,
+    ):
+        api = MagicMock()
+        build_api.return_value = api
+        api.reports.return_value.query.return_value.execute.side_effect = HttpError(
+            MagicMock(status=403, reason="Forbidden"),
+            json.dumps({
+                "error": {
+                    "message": "Quota exceeded for quota metric Queries.",
+                    "errors": [{"reason": "quotaExceeded"}],
+                }
+            }).encode(),
+        )
+
+        result = cli.main([
+            "analytics", "query",
+            "--channel", "MINE",
+            "--start-date", "2026-08-01",
+            "--end-date", "2026-08-02",
+            "--metrics", "views",
+        ])
+
+        self.assertEqual(result, 1)
+        self.assertIn("403", sys.stderr.getvalue())
+        self.assertIn("Quota exceeded", sys.stderr.getvalue())
+        self.assertIn("quotaExceeded", sys.stderr.getvalue())
+
+    @patch("yt_tools.cli.build_analytics_api")
+    @patch("yt_tools.cli.load_authorized_credentials")
+    def test_analytics_authorization_failure_returns_actionable_nonzero_error(
+        self,
+        load_credentials,
+        build_api,
+    ):
+        load_credentials.side_effect = AuthorizationError(
+            "Stored authorization refresh failed. Run yt-tools authorize again."
+        )
+
+        result = cli.main([
+            "analytics", "query",
+            "--channel", "MINE",
+            "--start-date", "2026-08-01",
+            "--end-date", "2026-08-02",
+            "--metrics", "views",
+        ])
+
+        self.assertEqual(result, 1)
+        self.assertIn("refresh failed", sys.stderr.getvalue())
+        self.assertIn("authorize again", sys.stderr.getvalue())
+        build_api.assert_not_called()
 
     def test_authorize_command_accepts_source_and_destination_overrides(self):
         args = cli.build_parser().parse_args([

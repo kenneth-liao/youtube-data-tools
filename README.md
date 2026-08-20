@@ -1,6 +1,6 @@
 # YouTube Data Tools
 
-A powerful CLI tool for working with the YouTube Data API.
+A CLI for public YouTube data and authorized private channel analytics.
 
 ## Requirements
 
@@ -65,6 +65,32 @@ yt-tools authorize \
 
 OAuth files are not discovered from project directories, `.env`, `~/.claude`,
 or `yutu` locations. Do not commit client-secret or token files.
+
+## Query channel analytics
+
+Run a synchronous analytics query after authorization:
+
+```bash
+yt-tools analytics query \
+  --channel MINE \
+  --start-date 2026-08-01 \
+  --end-date 2026-08-18 \
+  --metrics views,estimatedMinutesWatched \
+  --dimensions day \
+  --sort day
+```
+
+Use an owned channel ID instead of `MINE` when needed. Additional optional
+upstream parameters are `--filters`, `--max-results`, `--start-index`, and
+`--currency`. Use `--token-file` to select an explicit stored authorization.
+For descending sorting, pass the value with an equals sign, such as
+`--sort=-views`.
+
+The command returns JSON with the requested range, the returned range when it
+can be derived from `day` rows, ordered column metadata, and rows keyed by
+column name. A successful query with no rows returns an empty `rows` array and
+a `null` returned range. Google determines which metrics, dimensions, and
+filters are compatible.
 
 ## Usage
 
