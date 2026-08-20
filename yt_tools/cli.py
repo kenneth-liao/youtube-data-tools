@@ -21,6 +21,11 @@ from yt_tools.auth import (
     resolve_credential_paths,
 )
 from yt_tools.core import YouTubeService
+from yt_tools.snapshot import (
+    create_analytics_snapshot,
+    resolve_snapshot_range,
+    validate_snapshot_target,
+)
 from yt_tools.video_metadata import (
     VideoMetadataError,
     build_data_api,
@@ -330,6 +335,32 @@ def cmd_analytics_query(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_analytics_snapshot(args: argparse.Namespace) -> int:
+    """Retrieve a predefined performance view for an authorized channel or video."""
+    try:
+        start_date, end_date = resolve_snapshot_range(args.start_date, args.end_date)
+        channel = validate_snapshot_target(args.channel, args.video)
+        token_file = resolve_credential_paths(token_file=args.token_file).token_file
+        credentials = load_authorized_credentials(token_file)
+        result = create_analytics_snapshot(
+            build_analytics_api(credentials),
+            channel=channel,
+            start_date=start_date,
+            end_date=end_date,
+            video=args.video,
+            data_api=build_data_api(credentials) if args.video else None,
+        )
+    except (
+        AnalyticsInputError,
+        AnalyticsQueryError,
+        AuthorizationError,
+        VideoMetadataError,
+    ) as error:
+        raise ToolboxError(str(error)) from error
+    print_json(result)
+    return 0
+
+
 def cmd_docs(args: argparse.Namespace) -> int:
     """Display full CLI documentation from CLI_REFERENCE.md."""
     try:
@@ -359,7 +390,7 @@ Commands:
   related      Get related videos
   trending     Get trending videos
   authorize    Authorize access to an owned YouTube channel
-  analytics    Query analytics for an authorized channel
+  analytics    Query analytics or retrieve a performance snapshot
   docs         Show full documentation
 
 Environment Variables:
@@ -476,10 +507,11 @@ Options:
   --token-file <path>           Stored refreshable token destination
 """,
     "analytics": """
-Query analytics for an authorized channel.
+Retrieve analytics for an authorized channel.
 
 Usage:
   yt-tools analytics query [options]
+  yt-tools analytics snapshot [options]
 """,
     "analytics-query": """
 Run a synchronous YouTube Analytics API v2 channel query.
@@ -500,6 +532,18 @@ Optional parameters:
   --token-file <path>           Stored authorization override
   --format <json|csv>           Output format (default: json)
   --enrich-video-metadata       Add current metadata to video-dimension rows
+""",
+    "analytics-snapshot": """
+Retrieve a predefined performance view for an authorized channel or owned video.
+
+Required options:
+  --channel <MINE|channel-id>   Authorized channel identity
+
+Optional parameters:
+  --video <video-id>            Select one owned video
+  --start-date <YYYY-MM-DD>     First requested reporting day
+  --end-date <YYYY-MM-DD>       Last requested reporting day
+  --token-file <path>           Stored authorization override
 """,
     "docs": """
 Show the full documentation.
@@ -609,7 +653,7 @@ def build_parser() -> argparse.ArgumentParser:
     # Analytics
     analytics = sub.add_parser(
         "analytics",
-        help="Query analytics for an authorized channel",
+        help="Query analytics or retrieve a performance snapshot",
         custom_help_text=COMMAND_DOCS["analytics"],
     )
     analytics_sub = analytics.add_subparsers(
@@ -636,6 +680,18 @@ def build_parser() -> argparse.ArgumentParser:
     analytics_query.add_argument("--format", choices=("json", "csv"), default="json")
     analytics_query.add_argument("--enrich-video-metadata", action="store_true")
     analytics_query.set_defaults(func=cmd_analytics_query)
+
+    analytics_snapshot = analytics_sub.add_parser(
+        "snapshot",
+        help="Retrieve a channel or video performance snapshot",
+        custom_help_text=COMMAND_DOCS["analytics-snapshot"],
+    )
+    analytics_snapshot.add_argument("--channel", required=True)
+    analytics_snapshot.add_argument("--video")
+    analytics_snapshot.add_argument("--start-date")
+    analytics_snapshot.add_argument("--end-date")
+    analytics_snapshot.add_argument("--token-file")
+    analytics_snapshot.set_defaults(func=cmd_analytics_snapshot)
 
     # Docs
     doc = sub.add_parser("docs", help="Display full documentation", custom_help_text=COMMAND_DOCS["docs"])

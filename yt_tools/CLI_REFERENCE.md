@@ -202,6 +202,38 @@ than returning partial enrichment.
 
 ---
 
+### `analytics snapshot`
+Retrieve a predefined performance view for the authorized channel or one owned video.
+
+**Usage:**
+```bash
+yt-tools analytics snapshot --channel MINE [options]
+```
+
+**Required options:**
+- `--channel <MINE|channel-id>`: Authorized channel identity
+
+**Optional parameters:**
+- `--video <video-id>`: Select one owned video
+- `--start-date <YYYY-MM-DD>`: First requested reporting day; requires `--end-date`
+- `--end-date <YYYY-MM-DD>`: Last requested reporting day; requires `--start-date`
+- `--token-file <path>`: Stored authorization override
+
+Without explicit dates, the command requests the previous 28 completed
+Pacific-time reporting days ending yesterday. Channel snapshots include views,
+estimated watch minutes, average view duration, average percentage viewed, and
+subscribers gained and lost. Video snapshots omit the incompatible subscriber
+metrics and automatically include current Data API metadata while preserving
+the selected video ID.
+
+The JSON result contains the target, requested and actual returned ranges,
+period values, and daily rows. Period totals and averages come from a separate
+aggregate API query rather than calculations over daily values. An empty period
+uses `null` period values, an empty daily row array, and a `null` returned range;
+it does not contain fabricated zero values or prose analysis.
+
+---
+
 ### `docs`
 Show this full documentation.
 
