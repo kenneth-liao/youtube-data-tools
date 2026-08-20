@@ -1,4 +1,5 @@
 import argparse
+import csv
 import json
 import sys
 import unittest
@@ -337,6 +338,72 @@ class TestCLI(unittest.TestCase):
         self.assertEqual(json.loads(sys.stdout.getvalue())["rows"], [
             {"country": "US", "views": 20},
         ])
+
+    @patch("yt_tools.cli.build_analytics_api")
+    @patch("yt_tools.cli.load_authorized_credentials")
+    def test_analytics_query_outputs_explicit_csv_in_column_order(
+        self,
+        load_credentials,
+        build_api,
+    ):
+        api = MagicMock()
+        build_api.return_value = api
+        api.reports.return_value.query.return_value.execute.return_value = {
+            "columnHeaders": [
+                {"name": "day", "columnType": "DIMENSION", "dataType": "STRING"},
+                {"name": "views", "columnType": "METRIC", "dataType": "INTEGER"},
+                {"name": "note", "columnType": "DIMENSION", "dataType": "STRING"},
+            ],
+            "rows": [
+                ["2026-08-01", 20, ""],
+                ["2026-08-02", None, "quoted, value"],
+            ],
+        }
+
+        result = cli.main([
+            "analytics", "query",
+            "--channel", "MINE",
+            "--start-date", "2026-08-01",
+            "--end-date", "2026-08-02",
+            "--metrics", "views",
+            "--dimensions", "day",
+            "--format", "csv",
+        ])
+
+        self.assertEqual(result, 0)
+        self.assertEqual(list(csv.reader(StringIO(sys.stdout.getvalue()))), [
+            ["day", "views", "note"],
+            ["2026-08-01", "20", ""],
+            ["2026-08-02", "", "quoted, value"],
+        ])
+
+    @patch("yt_tools.cli.build_analytics_api")
+    @patch("yt_tools.cli.load_authorized_credentials")
+    def test_empty_analytics_query_outputs_header_only_csv(
+        self,
+        load_credentials,
+        build_api,
+    ):
+        api = MagicMock()
+        build_api.return_value = api
+        api.reports.return_value.query.return_value.execute.return_value = {
+            "columnHeaders": [
+                {"name": "views", "columnType": "METRIC", "dataType": "INTEGER"},
+            ],
+            "rows": [],
+        }
+
+        result = cli.main([
+            "analytics", "query",
+            "--channel", "MINE",
+            "--start-date", "2026-08-01",
+            "--end-date", "2026-08-02",
+            "--metrics", "views",
+            "--format", "csv",
+        ])
+
+        self.assertEqual(result, 0)
+        self.assertEqual(sys.stdout.getvalue(), "views\n")
 
     @patch("yt_tools.cli.load_authorized_credentials")
     def test_analytics_dates_and_metrics_are_required(self, load_credentials):

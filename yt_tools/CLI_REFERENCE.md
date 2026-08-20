@@ -181,12 +181,14 @@ yt-tools analytics query \
 - `--start-index <int>`: One-based first row for pagination
 - `--currency <code>`: Currency for monetary metrics
 - `--token-file <path>`: Stored authorization override
+- `--format <json|csv>`: Output format (default: `json`)
 
-Output is JSON with requested and returned range metadata, ordered column
+JSON output contains requested and returned range metadata, ordered column
 metadata, and rows keyed by column name. The returned range is `null` when it
-cannot be derived from `day` rows. Empty successful queries return an empty
-`rows` array. Metric, dimension, and filter compatibility is determined by
-Google.
+cannot be derived from `day` rows. CSV output uses the returned column order for
+headers and values; empty and null values are empty CSV fields. Empty successful
+queries return an empty JSON `rows` array or header-only CSV. Metric, dimension,
+and filter compatibility is determined by Google.
 
 ---
 
