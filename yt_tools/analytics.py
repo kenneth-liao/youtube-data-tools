@@ -1,10 +1,11 @@
-import json
 import re
 from dataclasses import dataclass
 from datetime import date
 
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+
+from yt_tools.google_api import format_http_error
 
 
 class AnalyticsInputError(ValueError):
@@ -13,30 +14,6 @@ class AnalyticsInputError(ValueError):
 
 class AnalyticsQueryError(Exception):
     """An actionable failure returned by the YouTube Analytics API."""
-
-
-def _format_http_error(error: HttpError) -> str:
-    status = getattr(error.resp, "status", "unknown status")
-    try:
-        payload = json.loads(error.content.decode("utf-8"))
-        detail = payload["error"]
-        parts = [detail.get("message")]
-        for item in detail.get("errors", []):
-            context = "; ".join(
-                f"{name}: {item[name]}"
-                for name in ("reason", "location")
-                if item.get(name)
-            )
-            item_message = item.get("message")
-            if item_message and item_message != parts[0]:
-                context = f"{context}; {item_message}" if context else item_message
-            if context:
-                parts.append(context)
-        details = " | ".join(part for part in parts if part)
-    except (KeyError, TypeError, ValueError, UnicodeDecodeError):
-        details = error._get_reason().strip()
-    suffix = f": {details}" if details else ""
-    return f"YouTube Analytics API request failed ({status}){suffix}"
 
 
 def _parse_date(value: str, field: str) -> date:
@@ -143,7 +120,9 @@ def query_channel_analytics(api, query: AnalyticsQuery) -> dict:
     try:
         response = api.reports().query(**parameters).execute()
     except HttpError as error:
-        raise AnalyticsQueryError(_format_http_error(error)) from error
+        raise AnalyticsQueryError(
+            format_http_error(error, "YouTube Analytics API")
+        ) from error
     except Exception as error:
         raise AnalyticsQueryError(
             f"YouTube Analytics API request failed: {error}"

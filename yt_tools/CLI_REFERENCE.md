@@ -182,6 +182,7 @@ yt-tools analytics query \
 - `--currency <code>`: Currency for monetary metrics
 - `--token-file <path>`: Stored authorization override
 - `--format <json|csv>`: Output format (default: `json`)
+- `--enrich-video-metadata`: Add current authorized Data API metadata to rows; requires the `video` dimension
 
 JSON output contains requested and returned range metadata, ordered column
 metadata, and rows keyed by column name. The returned range is `null` when it
@@ -189,6 +190,15 @@ cannot be derived from `day` rows. CSV output uses the returned column order for
 headers and values; empty and null values are empty CSV fields. Empty successful
 queries return an empty JSON `rows` array or header-only CSV. Metric, dimension,
 and filter compatibility is determined by Google.
+
+Metadata enrichment is explicit. Without the option, the query makes no Data
+API metadata request and its result contract is unchanged. With the option,
+each row keeps its canonical `video` ID and gains `videoMetadata` containing an
+availability value and, when available, the current snippet, content details,
+and status. Missing, deleted, and inaccessible videos are represented as
+unavailable without dropping their analytics rows. CSV serializes this metadata
+as JSON in the added column. A Data API request failure fails the command rather
+than returning partial enrichment.
 
 ---
 

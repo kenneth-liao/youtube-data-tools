@@ -21,6 +21,11 @@ from yt_tools.auth import (
     resolve_credential_paths,
 )
 from yt_tools.core import YouTubeService
+from yt_tools.video_metadata import (
+    VideoMetadataError,
+    build_data_api,
+    enrich_video_rows,
+)
 
 def _load_api_key_environment() -> None:
     """Load legacy API-key locations for public Data API commands only."""
@@ -70,7 +75,15 @@ def print_analytics_csv(result: dict) -> None:
     names = [column["name"] for column in result["columns"]]
     writer = csv.writer(sys.stdout, lineterminator="\n")
     writer.writerow(names)
-    writer.writerows([row[name] for name in names] for row in result["rows"])
+    writer.writerows(
+        [
+            json.dumps(row[name], ensure_ascii=False, separators=(",", ":"))
+            if isinstance(row[name], (dict, list))
+            else row[name]
+            for name in names
+        ]
+        for row in result["rows"]
+    )
 
 
 def cmd_search(args: argparse.Namespace) -> int:
@@ -292,10 +305,23 @@ def cmd_analytics_query(args: argparse.Namespace) -> int:
             start_index=args.start_index,
             currency=args.currency,
         )
+        if args.enrich_video_metadata and "video" not in (
+            query.dimensions or ""
+        ).split(","):
+            raise AnalyticsInputError(
+                "--enrich-video-metadata requires the video dimension."
+            )
         token_file = resolve_credential_paths(token_file=args.token_file).token_file
         credentials = load_authorized_credentials(token_file)
         result = query_channel_analytics(build_analytics_api(credentials), query)
-    except (AnalyticsInputError, AnalyticsQueryError, AuthorizationError) as error:
+        if args.enrich_video_metadata:
+            result = enrich_video_rows(build_data_api(credentials), result)
+    except (
+        AnalyticsInputError,
+        AnalyticsQueryError,
+        AuthorizationError,
+        VideoMetadataError,
+    ) as error:
         raise ToolboxError(str(error)) from error
     if args.format == "csv":
         print_analytics_csv(result)
@@ -472,7 +498,8 @@ Optional parameters:
   --start-index <int>           One-based first row
   --currency <code>             Currency for monetary metrics
   --token-file <path>           Stored authorization override
-  --format <json|csv>            Output format (default: json)
+  --format <json|csv>           Output format (default: json)
+  --enrich-video-metadata       Add current metadata to video-dimension rows
 """,
     "docs": """
 Show the full documentation.
@@ -607,6 +634,7 @@ def build_parser() -> argparse.ArgumentParser:
     analytics_query.add_argument("--currency")
     analytics_query.add_argument("--token-file")
     analytics_query.add_argument("--format", choices=("json", "csv"), default="json")
+    analytics_query.add_argument("--enrich-video-metadata", action="store_true")
     analytics_query.set_defaults(func=cmd_analytics_query)
 
     # Docs

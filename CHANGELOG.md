@@ -15,6 +15,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   actionable Google API errors. (#3)
 - Add explicit CSV output for analytics queries, including header-only empty
   results. (#4)
+- Add explicit enrichment of analytics video rows with current authorized
+  YouTube Data API metadata. (#5)
 
 ### Fixed
 
