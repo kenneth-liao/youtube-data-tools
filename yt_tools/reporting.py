@@ -75,6 +75,32 @@ def list_reporting_jobs(api) -> dict:
             return {"jobs": jobs}
 
 
+def list_reporting_job_reports(api, job_id: str) -> dict:
+    """List generated reporting files for one reporting job."""
+    reports = []
+    page_token = None
+    while True:
+        parameters = {"jobId": job_id}
+        if page_token:
+            parameters["pageToken"] = page_token
+        response = _execute_job_request(
+            lambda: api.jobs().reports().list(**parameters)
+        )
+        reports.extend(response.get("reports", []))
+        page_token = response.get("nextPageToken")
+        if not page_token:
+            result = {
+                "availability": "available" if reports else "empty",
+                "reports": reports,
+            }
+            if not reports:
+                result["message"] = (
+                    "No generated files are available for reporting job "
+                    f"{job_id}."
+                )
+            return result
+
+
 def list_report_types(api) -> dict:
     """List reporting types available to the authorized channel."""
     report_types = []

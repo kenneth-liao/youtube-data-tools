@@ -10,6 +10,7 @@ from yt_tools.reporting import (
     build_reporting_api,
     create_reporting_job,
     delete_reporting_job,
+    list_reporting_job_reports,
     list_reporting_jobs,
     list_report_types,
 )
@@ -286,6 +287,93 @@ class TestReportingJobs(unittest.TestCase):
                 message = str(raised.exception)
                 self.assertIn(f"request failed ({status})", message)
                 self.assertIn(detail, message.lower())
+
+
+class TestReportingJobReports(unittest.TestCase):
+    def test_list_preserves_download_identity_and_distinct_backfills(self):
+        api = MagicMock()
+        api.jobs.return_value.reports.return_value.list.return_value.execute.return_value = {
+            "reports": [
+                {
+                    "id": "report-original",
+                    "jobId": "job-123",
+                    "startTime": "2026-08-19T00:00:00Z",
+                    "endTime": "2026-08-20T00:00:00Z",
+                    "createTime": "2026-08-20T06:00:00Z",
+                    "downloadUrl": "https://youtube.example/report-original",
+                },
+                {
+                    "id": "report-backfill",
+                    "jobId": "job-123",
+                    "startTime": "2026-08-19T00:00:00Z",
+                    "endTime": "2026-08-20T00:00:00Z",
+                    "createTime": "2026-08-21T06:00:00Z",
+                    "downloadUrl": "https://youtube.example/report-backfill",
+                },
+            ]
+        }
+
+        result = list_reporting_job_reports(api, "job-123")
+
+        self.assertEqual(result, {
+            "availability": "available",
+            "reports": [
+                {
+                    "id": "report-original",
+                    "jobId": "job-123",
+                    "startTime": "2026-08-19T00:00:00Z",
+                    "endTime": "2026-08-20T00:00:00Z",
+                    "createTime": "2026-08-20T06:00:00Z",
+                    "downloadUrl": "https://youtube.example/report-original",
+                },
+                {
+                    "id": "report-backfill",
+                    "jobId": "job-123",
+                    "startTime": "2026-08-19T00:00:00Z",
+                    "endTime": "2026-08-20T00:00:00Z",
+                    "createTime": "2026-08-21T06:00:00Z",
+                    "downloadUrl": "https://youtube.example/report-backfill",
+                },
+            ],
+        })
+        api.jobs.return_value.reports.return_value.list.assert_called_once_with(
+            jobId="job-123"
+        )
+
+    def test_list_includes_all_generated_file_pages(self):
+        api = MagicMock()
+        first_page = MagicMock()
+        first_page.execute.return_value = {
+            "reports": [{"id": "report-1"}],
+            "nextPageToken": "next-page",
+        }
+        second_page = MagicMock()
+        second_page.execute.return_value = {
+            "reports": [{"id": "report-2"}],
+        }
+        reports = api.jobs.return_value.reports.return_value
+        reports.list.side_effect = [first_page, second_page]
+
+        result = list_reporting_job_reports(api, "job-123")
+
+        self.assertEqual(
+            [report["id"] for report in result["reports"]],
+            ["report-1", "report-2"],
+        )
+        reports.list.assert_any_call(jobId="job-123")
+        reports.list.assert_any_call(jobId="job-123", pageToken="next-page")
+
+    def test_valid_job_without_generated_files_is_pending_empty(self):
+        api = MagicMock()
+        api.jobs.return_value.reports.return_value.list.return_value.execute.return_value = {}
+
+        result = list_reporting_job_reports(api, "job-pending")
+
+        self.assertEqual(result, {
+            "availability": "empty",
+            "reports": [],
+            "message": "No generated files are available for reporting job job-pending.",
+        })
 
 
 if __name__ == "__main__":

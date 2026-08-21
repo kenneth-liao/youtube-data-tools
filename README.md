@@ -205,12 +205,24 @@ Delete one selected job explicitly by its stable upstream identity:
 yt-tools reporting jobs delete --job-id <job-id>
 ```
 
-Successful deletion returns the selected ID with `status: "deleted"`. An absent
-job, unauthorized job, invalid report type, or other Reporting API failure
-returns a nonzero status with the upstream HTTP status and actionable details.
-All job commands support `--token-file` for an explicit stored authorization.
-They do not list or download generated files, perform reach-specific
-orchestration, or wait for YouTube to generate a reporting file.
+Successful deletion returns the selected ID with `status: "deleted"`. List all
+generated reporting files for a selected job:
+
+```bash
+yt-tools reporting jobs reports list --job-id <job-id>
+```
+
+The command follows every response page and preserves each report's upstream
+ID, job ID, covered start and end times, creation time, and authenticated
+download URL. Files for the same period remain distinct, so later backfills are
+visible. A valid job with no generated files returns explicit empty availability
+rather than an error.
+
+An absent or unauthorized job, invalid report type, or other Reporting API
+failure returns a nonzero status with the upstream HTTP status and actionable
+details. All job commands support `--token-file` for an explicit stored
+authorization. They do not download or aggregate file contents, perform
+reach-specific orchestration, or wait for YouTube to generate a reporting file.
 
 ## Usage
 
