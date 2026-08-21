@@ -23,6 +23,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   including explicit absolute and percentage changes. (#7)
 - Add authorized Reporting API report-type discovery with paginated,
   agent-selectable JSON output and reach-report identification. (#9)
+- Add asynchronous reporting-job creation, listing, and explicit deletion by
+  stable upstream identity. (#10)
 
 ### Fixed
 
