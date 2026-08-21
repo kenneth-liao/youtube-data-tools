@@ -261,6 +261,55 @@ failures. The command does not support content-owner impersonation.
 
 ---
 
+### `reporting jobs create`
+Create an asynchronous reporting job from an available report type.
+
+**Usage:**
+```bash
+yt-tools reporting jobs create \
+  --report-type-id <report-type-id> \
+  --name <name> \
+  [options]
+```
+
+**Required options:**
+- `--report-type-id <id>`: Upstream ID selected from `reporting report-types`
+- `--name <name>`: Caller-selected reporting job name
+
+**Optional parameters:**
+- `--token-file <path>`: Stored authorization override
+
+The JSON response preserves the upstream job ID, report type ID, name, creation
+time, and any other returned lifecycle metadata. The command returns as soon as
+YouTube creates the job; it does not wait for a reporting file.
+
+### `reporting jobs list`
+List asynchronous reporting jobs for the authorized channel.
+
+**Usage:**
+```bash
+yt-tools reporting jobs list [--token-file <path>]
+```
+
+The command follows all response pages. Each job preserves its stable upstream
+ID and lifecycle metadata, including creation and expiration times when
+present.
+
+### `reporting jobs delete`
+Delete one asynchronous reporting job by stable upstream identity.
+
+**Usage:**
+```bash
+yt-tools reporting jobs delete --job-id <job-id> [--token-file <path>]
+```
+
+Successful deletion returns the selected ID with `status: "deleted"`. Missing
+and unauthorized jobs remain distinguishable through actionable upstream 404
+and 403 errors. No job operation lists or downloads generated files, performs
+reach-specific orchestration, or polls for file generation.
+
+---
+
 ### `docs`
 Show this full documentation.
 

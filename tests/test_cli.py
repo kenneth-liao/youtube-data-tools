@@ -11,6 +11,7 @@ from googleapiclient.errors import HttpError
 
 from yt_tools import cli
 from yt_tools.auth import AuthorizationError
+from yt_tools.reporting import ReportingDiscoveryError
 
 class TestCLI(unittest.TestCase):
     def setUp(self):
@@ -345,6 +346,131 @@ class TestCLI(unittest.TestCase):
         self.assertIn("refresh failed", sys.stderr.getvalue())
         self.assertIn("authorize again", sys.stderr.getvalue())
         build_api.assert_not_called()
+
+    @patch("yt_tools.cli.build_reporting_api")
+    @patch("yt_tools.cli.load_authorized_credentials")
+    def test_reporting_job_create_returns_upstream_identity(
+        self,
+        load_credentials,
+        build_api,
+    ):
+        api = MagicMock()
+        build_api.return_value = api
+        api.jobs.return_value.create.return_value.execute.return_value = {
+            "id": "job-123",
+            "reportTypeId": "channel_basic_a3",
+            "name": "Daily channel export",
+            "createTime": "2026-08-21T10:00:00Z",
+        }
+
+        result = cli.main([
+            "reporting", "jobs", "create",
+            "--report-type-id", "channel_basic_a3",
+            "--name", "Daily channel export",
+            "--token-file", "/secure/token.json",
+        ])
+
+        self.assertEqual(result, 0)
+        load_credentials.assert_called_once_with(Path("/secure/token.json"))
+        build_api.assert_called_once_with(load_credentials.return_value)
+        self.assertEqual(json.loads(sys.stdout.getvalue()), {
+            "id": "job-123",
+            "reportTypeId": "channel_basic_a3",
+            "name": "Daily channel export",
+            "createTime": "2026-08-21T10:00:00Z",
+        })
+
+    @patch("yt_tools.cli.build_reporting_api")
+    @patch("yt_tools.cli.load_authorized_credentials")
+    def test_reporting_job_client_failure_is_actionable(
+        self,
+        load_credentials,
+        build_api,
+    ):
+        build_api.side_effect = ReportingDiscoveryError(
+            "Failed to initialize the YouTube Reporting API client: unavailable"
+        )
+
+        result = cli.main([
+            "reporting", "jobs", "create",
+            "--report-type-id", "channel_basic_a3",
+            "--name", "Daily export",
+        ])
+
+        self.assertEqual(result, 1)
+        self.assertIn("Failed to initialize", sys.stderr.getvalue())
+        self.assertNotIn("Unexpected", sys.stderr.getvalue())
+
+    @patch("yt_tools.cli.load_authorized_credentials")
+    def test_reporting_job_create_rejects_empty_input_before_authorization(
+        self,
+        load_credentials,
+    ):
+        for option in ("--report-type-id", "--name"):
+            with self.subTest(option=option):
+                with self.assertRaises(SystemExit) as raised:
+                    arguments = [
+                        "reporting", "jobs", "create",
+                        "--report-type-id", "channel_basic_a3",
+                        "--name", "Daily export",
+                    ]
+                    arguments[arguments.index(option) + 1] = "   "
+                    cli.main(arguments)
+                self.assertEqual(raised.exception.code, 2)
+        load_credentials.assert_not_called()
+
+    @patch("yt_tools.cli.build_reporting_api")
+    @patch("yt_tools.cli.load_authorized_credentials")
+    def test_reporting_jobs_list_returns_lifecycle_metadata(
+        self,
+        load_credentials,
+        build_api,
+    ):
+        api = MagicMock()
+        build_api.return_value = api
+        api.jobs.return_value.list.return_value.execute.return_value = {
+            "jobs": [{
+                "id": "job-123",
+                "reportTypeId": "channel_basic_a3",
+                "name": "Daily channel export",
+                "createTime": "2026-08-21T10:00:00Z",
+                "expireTime": "2026-09-21T10:00:00Z",
+                "systemManaged": False,
+            }]
+        }
+
+        result = cli.main(["reporting", "jobs", "list"])
+
+        self.assertEqual(result, 0)
+        self.assertEqual(json.loads(sys.stdout.getvalue())["jobs"][0]["id"], "job-123")
+        self.assertEqual(
+            json.loads(sys.stdout.getvalue())["jobs"][0]["expireTime"],
+            "2026-09-21T10:00:00Z",
+        )
+
+    @patch("yt_tools.cli.build_reporting_api")
+    @patch("yt_tools.cli.load_authorized_credentials")
+    def test_reporting_job_delete_outputs_explicit_success(
+        self,
+        load_credentials,
+        build_api,
+    ):
+        api = MagicMock()
+        build_api.return_value = api
+        api.jobs.return_value.delete.return_value.execute.return_value = None
+
+        result = cli.main([
+            "reporting", "jobs", "delete",
+            "--job-id", "job-123",
+            "--token-file", "/secure/token.json",
+        ])
+
+        self.assertEqual(result, 0)
+        api.jobs.return_value.delete.assert_called_once_with(jobId="job-123")
+        self.assertEqual(json.loads(sys.stdout.getvalue()), {
+            "id": "job-123",
+            "status": "deleted",
+        })
 
     @patch("yt_tools.cli.build_data_api")
     @patch("yt_tools.cli.build_analytics_api")

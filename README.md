@@ -179,8 +179,38 @@ Pagination is automatic.
 A successful response uses `availability: "available"` with selectable report
 types or `availability: "empty"` with an empty list and explanatory message.
 Authorization and Reporting API failures instead return a nonzero exit status
-with actionable details. This command does not create reporting jobs or access
-generated files.
+with actionable details.
+
+## Manage asynchronous reporting jobs
+
+Create a reporting job from an available report type ID and caller-selected
+name:
+
+```bash
+yt-tools reporting jobs create \
+  --report-type-id channel_basic_a3 \
+  --name "Daily channel export"
+```
+
+Creation returns the upstream job ID, report type ID, name, and creation time.
+List existing jobs and their upstream lifecycle metadata:
+
+```bash
+yt-tools reporting jobs list
+```
+
+Delete one selected job explicitly by its stable upstream identity:
+
+```bash
+yt-tools reporting jobs delete --job-id <job-id>
+```
+
+Successful deletion returns the selected ID with `status: "deleted"`. An absent
+job, unauthorized job, invalid report type, or other Reporting API failure
+returns a nonzero status with the upstream HTTP status and actionable details.
+All job commands support `--token-file` for an explicit stored authorization.
+They do not list or download generated files, perform reach-specific
+orchestration, or wait for YouTube to generate a reporting file.
 
 ## Usage
 
