@@ -193,6 +193,58 @@ def list_reporting_job_reports(api, job_id: str) -> dict:
             return result
 
 
+def retrieve_thumbnail_reach_reports(api) -> dict:
+    """Establish reach reporting and expose every generated file without waiting."""
+    report_type = next(
+        (
+            report_type
+            for report_type in list_report_types(api)["reportTypes"]
+            if report_type["name"].casefold() == "reach basic"
+            and "deprecateTime" not in report_type
+        ),
+        None,
+    )
+    if report_type is None:
+        raise ReportingDiscoveryError(
+            "No current non-deprecated Reach Basic report type is available "
+            "for the authorized channel."
+        )
+    jobs = list_reporting_jobs(api)["jobs"]
+    job = next(
+        (job for job in jobs if job["reportTypeId"] == report_type["id"]),
+        None,
+    )
+    disposition = "reused"
+    if job is None:
+        job = create_reporting_job(
+            api, report_type["id"], "yt-tools thumbnail reach"
+        )
+        disposition = "created"
+    reports = list_reporting_job_reports(api, job["id"])
+    result = {
+        "state": "available" if reports["reports"] else "pending",
+        "reportType": report_type,
+        "job": job,
+        "jobDisposition": disposition,
+        "fields": [
+            {
+                "name": "video_thumbnail_impressions",
+                "meaning": "Video thumbnail impressions",
+            },
+            {
+                "name": "video_thumbnail_impressions_ctr",
+                "meaning": "Video thumbnail impression click-through rate",
+            },
+        ],
+        "reports": reports["reports"],
+    }
+    if not reports["reports"]:
+        result["message"] = (
+            "Reach files are not yet available. The reporting job remains pending."
+        )
+    return result
+
+
 def list_report_types(api) -> dict:
     """List reporting types available to the authorized channel."""
     report_types = []
