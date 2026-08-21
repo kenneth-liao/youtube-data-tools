@@ -25,6 +25,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   agent-selectable JSON output and reach-report identification. (#9)
 - Add asynchronous reporting-job creation, listing, and explicit deletion by
   stable upstream identity. (#10)
+- Add paginated generated-file discovery for selected reporting jobs with
+  preserved download identity and explicit pending availability. (#11)
 
 ### Fixed
 

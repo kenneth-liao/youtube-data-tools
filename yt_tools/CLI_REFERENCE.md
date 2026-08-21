@@ -305,8 +305,28 @@ yt-tools reporting jobs delete --job-id <job-id> [--token-file <path>]
 
 Successful deletion returns the selected ID with `status: "deleted"`. Missing
 and unauthorized jobs remain distinguishable through actionable upstream 404
-and 403 errors. No job operation lists or downloads generated files, performs
-reach-specific orchestration, or polls for file generation.
+and 403 errors.
+
+### `reporting jobs reports list`
+List generated reporting files for one selected reporting job.
+
+**Usage:**
+```bash
+yt-tools reporting jobs reports list \
+  --job-id <job-id> \
+  [--token-file <path>]
+```
+
+The command follows all response pages and preserves each report's upstream ID,
+job ID, covered start and end times, creation time, authenticated download URL,
+and other returned metadata. Reports are not deduplicated: files covering the
+same period remain distinct by report ID and creation time so backfills stay
+visible. A valid job with no generated files returns `availability: "empty"`
+with an empty `reports` list. Missing jobs and other upstream failures return
+nonzero actionable errors.
+
+This command lists metadata only. It does not download or aggregate file
+contents, perform reach-specific orchestration, or poll for file generation.
 
 ---
 

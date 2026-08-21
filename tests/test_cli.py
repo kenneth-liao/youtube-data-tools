@@ -450,6 +450,66 @@ class TestCLI(unittest.TestCase):
 
     @patch("yt_tools.cli.build_reporting_api")
     @patch("yt_tools.cli.load_authorized_credentials")
+    def test_reporting_job_reports_list_returns_generated_file_metadata(
+        self,
+        load_credentials,
+        build_api,
+    ):
+        api = MagicMock()
+        build_api.return_value = api
+        api.jobs.return_value.reports.return_value.list.return_value.execute.return_value = {
+            "reports": [{
+                "id": "report-123",
+                "jobId": "job-123",
+                "startTime": "2026-08-19T00:00:00Z",
+                "endTime": "2026-08-20T00:00:00Z",
+                "createTime": "2026-08-20T06:00:00Z",
+                "downloadUrl": "https://youtube.example/report-123",
+            }]
+        }
+
+        result = cli.main([
+            "reporting", "jobs", "reports", "list",
+            "--job-id", "job-123",
+            "--token-file", "/secure/token.json",
+        ])
+
+        self.assertEqual(result, 0)
+        load_credentials.assert_called_once_with(Path("/secure/token.json"))
+        output = json.loads(sys.stdout.getvalue())
+        self.assertEqual(output["availability"], "available")
+        self.assertEqual(output["reports"][0]["id"], "report-123")
+        self.assertEqual(
+            output["reports"][0]["downloadUrl"],
+            "https://youtube.example/report-123",
+        )
+
+    @patch("yt_tools.cli.build_reporting_api")
+    @patch("yt_tools.cli.load_authorized_credentials")
+    def test_reporting_job_reports_unknown_job_is_actionable(
+        self,
+        load_credentials,
+        build_api,
+    ):
+        api = MagicMock()
+        build_api.return_value = api
+        api.jobs.return_value.reports.return_value.list.return_value.execute.side_effect = HttpError(
+            MagicMock(status=404, reason="Not Found"),
+            json.dumps({"error": {"message": "Reporting job not found."}}).encode(),
+        )
+
+        result = cli.main([
+            "reporting", "jobs", "reports", "list",
+            "--job-id", "unknown-job",
+        ])
+
+        self.assertEqual(result, 1)
+        self.assertEqual(sys.stdout.getvalue(), "")
+        self.assertIn("request failed (404)", sys.stderr.getvalue())
+        self.assertIn("Reporting job not found", sys.stderr.getvalue())
+
+    @patch("yt_tools.cli.build_reporting_api")
+    @patch("yt_tools.cli.load_authorized_credentials")
     def test_reporting_job_delete_outputs_explicit_success(
         self,
         load_credentials,

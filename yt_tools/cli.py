@@ -26,6 +26,7 @@ from yt_tools.reporting import (
     build_reporting_api,
     create_reporting_job,
     delete_reporting_job,
+    list_reporting_job_reports,
     list_reporting_jobs,
     list_report_types,
 )
@@ -345,6 +346,18 @@ def cmd_reporting_jobs_list(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_reporting_job_reports_list(args: argparse.Namespace) -> int:
+    """List generated reporting files for one reporting job."""
+    try:
+        result = list_reporting_job_reports(
+            _build_authorized_reporting_api(args.token_file), args.job_id
+        )
+    except (AuthorizationError, ReportingError) as error:
+        raise ToolboxError(str(error)) from error
+    print_json(result)
+    return 0
+
+
 def cmd_reporting_job_delete(args: argparse.Namespace) -> int:
     """Delete one asynchronous reporting job by upstream identity."""
     try:
@@ -578,6 +591,7 @@ Usage:
   yt-tools reporting jobs create --report-type-id <id> --name <name> [options]
   yt-tools reporting jobs list [options]
   yt-tools reporting jobs delete --job-id <id> [options]
+  yt-tools reporting jobs reports list --job-id <id> [options]
 """,
     "reporting-report-types": """
 List YouTube Reporting API report types available to the authorized channel.
@@ -589,12 +603,13 @@ Optional parameters:
   --token-file <path>           Stored authorization override
 """,
     "reporting-jobs": """
-Create, list, or delete asynchronous reporting jobs.
+Manage asynchronous reporting jobs and their generated files.
 
 Usage:
   yt-tools reporting jobs create --report-type-id <id> --name <name> [options]
   yt-tools reporting jobs list [options]
   yt-tools reporting jobs delete --job-id <id> [options]
+  yt-tools reporting jobs reports list --job-id <id> [options]
 """,
     "reporting-jobs-create": """
 Create an asynchronous reporting job.
@@ -614,6 +629,21 @@ Optional parameters:
 """,
     "reporting-jobs-delete": """
 Delete one asynchronous reporting job by upstream identity.
+
+Required options:
+  --job-id <id>                 Upstream reporting job ID
+
+Optional parameters:
+  --token-file <path>           Stored authorization override
+""",
+    "reporting-jobs-reports": """
+List generated reporting files for a selected reporting job.
+
+Usage:
+  yt-tools reporting jobs reports list --job-id <id> [options]
+""",
+    "reporting-jobs-reports-list": """
+List all generated reporting files for a selected reporting job.
 
 Required options:
   --job-id <id>                 Upstream reporting job ID
@@ -871,6 +901,26 @@ def build_parser() -> argparse.ArgumentParser:
     reporting_jobs_delete.add_argument("--job-id", required=True, type=_non_empty)
     reporting_jobs_delete.add_argument("--token-file")
     reporting_jobs_delete.set_defaults(func=cmd_reporting_job_delete)
+    reporting_job_reports = reporting_jobs_sub.add_parser(
+        "reports",
+        help="List generated reporting files for a selected job",
+        custom_help_text=COMMAND_DOCS["reporting-jobs-reports"],
+    )
+    reporting_job_reports_sub = reporting_job_reports.add_subparsers(
+        dest="reporting_job_reports_cmd",
+        required=True,
+        parser_class=CustomHelpParser,
+    )
+    reporting_job_reports_list = reporting_job_reports_sub.add_parser(
+        "list",
+        help="List all generated reporting files",
+        custom_help_text=COMMAND_DOCS["reporting-jobs-reports-list"],
+    )
+    reporting_job_reports_list.add_argument(
+        "--job-id", required=True, type=_non_empty
+    )
+    reporting_job_reports_list.add_argument("--token-file")
+    reporting_job_reports_list.set_defaults(func=cmd_reporting_job_reports_list)
 
     # Docs
     doc = sub.add_parser("docs", help="Display full documentation", custom_help_text=COMMAND_DOCS["docs"])
