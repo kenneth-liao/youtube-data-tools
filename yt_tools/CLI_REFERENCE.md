@@ -261,6 +261,36 @@ failures. The command does not support content-owner impersonation.
 
 ---
 
+### `reporting reach`
+Establish thumbnail reach reporting for the authorized channel and expose every
+generated file without waiting.
+
+**Usage:**
+```bash
+yt-tools reporting reach [options]
+```
+
+**Optional parameters:**
+- `--report-id <id>`: Explicit generated file selected from the current result
+- `--destination <path>`: Exact local output file; required with `--report-id`
+- `--replace`: Explicitly replace an existing destination after a complete download
+- `--token-file <path>`: Stored authorization override
+
+The command discovers the current non-deprecated `Reach Basic` report type by
+upstream name and metadata; it does not select a versioned ID or Reach Combined.
+It reuses a matching job and creates one only when absent. It lists all generated
+versions and backfills. If none exists, the JSON result keeps the job identity
+and returns `state: "pending"`; it does not poll, wait, or claim zero
+impressions.
+
+The result identifies `video_thumbnail_impressions` and
+`video_thumbnail_impressions_ctr` as the thumbnail reach fields. Neither field
+is advertising impressions (`ad_impressions`). A download requires both an
+explicit listed report ID and destination and uses the same atomic destination
+contract as `reporting jobs reports download`.
+
+---
+
 ### `reporting jobs create`
 Create an asynchronous reporting job from an available report type.
 
@@ -353,8 +383,8 @@ completes. Without `--replace`, an existing file is preserved and the command
 fails. If a transfer is interrupted, no partial destination appears; during an
 explicit replacement, the existing complete file remains in place.
 
-The reports commands do not aggregate files, import data, perform reach-specific
-orchestration, poll for generation, or silently delete older downloads.
+The generic job report commands do not aggregate files, import data, poll for
+generation, or silently delete older downloads.
 
 ---
 

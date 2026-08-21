@@ -29,6 +29,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   preserved download identity and explicit pending availability. (#11)
 - Add authorized streaming downloads to explicit atomic destinations with
   opt-in replacement and identity-rich suggested filenames. (#12)
+- Add a non-blocking thumbnail reach workflow that discovers the current report
+  type, reuses or creates its job, lists all files, and downloads explicit
+  selections. (#13)
 
 ### Fixed
 

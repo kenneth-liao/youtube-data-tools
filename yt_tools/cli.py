@@ -24,6 +24,7 @@ from yt_tools.auth import (
 )
 from yt_tools.core import YouTubeService
 from yt_tools.reporting import (
+    ReportingDownloadError,
     ReportingError,
     build_reporting_api,
     create_reporting_job,
@@ -32,6 +33,7 @@ from yt_tools.reporting import (
     list_reporting_job_reports,
     list_reporting_jobs,
     list_report_types,
+    retrieve_thumbnail_reach_reports,
 )
 from yt_tools.snapshot import (
     create_analytics_snapshot,
@@ -322,6 +324,46 @@ def cmd_reporting_report_types(args: argparse.Namespace) -> int:
         result = list_report_types(_build_authorized_reporting_api(args.token_file))
     except (AuthorizationError, ReportingError) as error:
         raise ToolboxError(str(error)) from error
+    print_json(result)
+    return 0
+
+
+def cmd_reporting_reach(args: argparse.Namespace) -> int:
+    """Establish thumbnail reach reporting and expose generated files."""
+    transport = None
+    try:
+        if bool(args.report_id) != bool(args.destination):
+            raise ReportingDownloadError(
+                "--report-id and --destination must be provided together."
+            )
+        if args.replace and not args.report_id:
+            raise ReportingDownloadError(
+                "--replace requires --report-id and --destination."
+            )
+        credentials = _load_authorized_reporting_credentials(args.token_file)
+        api = build_reporting_api(credentials)
+        result = retrieve_thumbnail_reach_reports(api)
+        if args.report_id:
+            if not any(
+                report["id"] == args.report_id for report in result["reports"]
+            ):
+                raise ReportingDownloadError(
+                    f"Reach report {args.report_id} is not in the current file list."
+                )
+            transport = AuthorizedSession(credentials)
+            result["download"] = download_reporting_job_report(
+                api,
+                transport,
+                result["job"]["id"],
+                args.report_id,
+                args.destination,
+                replace=args.replace,
+            )
+    except (AuthorizationError, ReportingError) as error:
+        raise ToolboxError(str(error)) from error
+    finally:
+        if transport is not None:
+            transport.close()
     print_json(result)
     return 0
 
@@ -617,11 +659,24 @@ Discover asynchronous reporting resources for an authorized channel.
 
 Usage:
   yt-tools reporting report-types [options]
+  yt-tools reporting reach [options]
   yt-tools reporting jobs create --report-type-id <id> --name <name> [options]
   yt-tools reporting jobs list [options]
   yt-tools reporting jobs delete --job-id <id> [options]
   yt-tools reporting jobs reports list --job-id <id> [options]
   yt-tools reporting jobs reports download --job-id <id> --report-id <id> --destination <path> [options]
+""",
+    "reporting-reach": """
+Establish thumbnail reach reporting and expose every generated file without waiting.
+
+Usage:
+  yt-tools reporting reach [options]
+
+Optional parameters:
+  --report-id <id>              Generated file selected from the current list
+  --destination <path>          Exact destination; required with --report-id
+  --replace                     Explicitly replace an existing destination
+  --token-file <path>           Stored authorization override
 """,
     "reporting-report-types": """
 List YouTube Reporting API report types available to the authorized channel.
@@ -912,6 +967,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     reporting_report_types.add_argument("--token-file")
     reporting_report_types.set_defaults(func=cmd_reporting_report_types)
+    reporting_reach = reporting_sub.add_parser(
+        "reach",
+        help="Retrieve thumbnail reach reporting files",
+        custom_help_text=COMMAND_DOCS["reporting-reach"],
+    )
+    reporting_reach.add_argument("--report-id", type=_non_empty)
+    reporting_reach.add_argument("--destination", type=_destination_path)
+    reporting_reach.add_argument("--replace", action="store_true")
+    reporting_reach.add_argument("--token-file")
+    reporting_reach.set_defaults(func=cmd_reporting_reach)
 
     reporting_jobs = reporting_sub.add_parser(
         "jobs",

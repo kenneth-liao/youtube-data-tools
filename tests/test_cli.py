@@ -347,6 +347,131 @@ class TestCLI(unittest.TestCase):
         self.assertIn("authorize again", sys.stderr.getvalue())
         build_api.assert_not_called()
 
+    @patch("yt_tools.cli.retrieve_thumbnail_reach_reports")
+    @patch("yt_tools.cli.build_reporting_api")
+    @patch("yt_tools.cli.load_authorized_credentials")
+    def test_reporting_reach_exposes_pending_job_without_waiting(
+        self,
+        load_credentials,
+        build_api,
+        retrieve_reach,
+    ):
+        retrieve_reach.return_value = {
+            "state": "pending",
+            "reportType": {"id": "current-type", "name": "Reach Basic"},
+            "job": {"id": "reach-job", "reportTypeId": "current-type"},
+            "jobDisposition": "created",
+            "fields": [
+                {"name": "video_thumbnail_impressions"},
+                {"name": "video_thumbnail_impressions_ctr"},
+            ],
+            "reports": [],
+            "message": "Reach files are not yet available.",
+        }
+
+        result = cli.main([
+            "reporting", "reach", "--token-file", "/secure/token.json"
+        ])
+
+        self.assertEqual(result, 0)
+        retrieve_reach.assert_called_once_with(build_api.return_value)
+        output = json.loads(sys.stdout.getvalue())
+        self.assertEqual(output["state"], "pending")
+        self.assertEqual(output["job"]["id"], "reach-job")
+
+    @patch("yt_tools.cli.download_reporting_job_report")
+    @patch("yt_tools.cli.retrieve_thumbnail_reach_reports")
+    @patch("yt_tools.cli.AuthorizedSession")
+    @patch("yt_tools.cli.build_reporting_api")
+    @patch("yt_tools.cli.load_authorized_credentials")
+    def test_reporting_reach_downloads_only_the_explicitly_selected_listed_file(
+        self,
+        load_credentials,
+        build_api,
+        authorized_session,
+        retrieve_reach,
+        download_report,
+    ):
+        retrieve_reach.return_value = {
+            "state": "available",
+            "reportType": {"id": "current-type", "name": "Reach Basic"},
+            "job": {"id": "reach-job", "reportTypeId": "current-type"},
+            "jobDisposition": "reused",
+            "fields": [],
+            "reports": [
+                {"id": "original", "jobId": "reach-job"},
+                {"id": "backfill", "jobId": "reach-job"},
+            ],
+        }
+        download_report.return_value = {
+            "jobId": "reach-job",
+            "reportId": "backfill",
+            "destination": "/exports/backfill.csv",
+            "status": "downloaded",
+        }
+
+        result = cli.main([
+            "reporting", "reach",
+            "--report-id", "backfill",
+            "--destination", "/exports/backfill.csv",
+            "--replace",
+        ])
+
+        self.assertEqual(result, 0)
+        download_report.assert_called_once_with(
+            build_api.return_value,
+            authorized_session.return_value,
+            "reach-job",
+            "backfill",
+            Path("/exports/backfill.csv"),
+            replace=True,
+        )
+        output = json.loads(sys.stdout.getvalue())
+        self.assertEqual(output["download"]["status"], "downloaded")
+        self.assertEqual(
+            [report["id"] for report in output["reports"]],
+            ["original", "backfill"],
+        )
+        authorized_session.return_value.close.assert_called_once_with()
+
+    @patch("yt_tools.cli.download_reporting_job_report")
+    @patch("yt_tools.cli.retrieve_thumbnail_reach_reports")
+    @patch("yt_tools.cli.build_reporting_api")
+    @patch("yt_tools.cli.load_authorized_credentials")
+    def test_reporting_reach_rejects_a_report_absent_from_the_current_list(
+        self,
+        load_credentials,
+        build_api,
+        retrieve_reach,
+        download_report,
+    ):
+        retrieve_reach.return_value = {
+            "state": "available",
+            "job": {"id": "reach-job"},
+            "reports": [{"id": "listed-report"}],
+        }
+
+        result = cli.main([
+            "reporting", "reach",
+            "--report-id", "unknown-report",
+            "--destination", "/exports/unknown.csv",
+        ])
+
+        self.assertEqual(result, 1)
+        self.assertIn("not in the current file list", sys.stderr.getvalue())
+        download_report.assert_not_called()
+
+    @patch("yt_tools.cli.load_authorized_credentials")
+    def test_reporting_reach_rejects_replace_without_a_download_selection(
+        self,
+        load_credentials,
+    ):
+        result = cli.main(["reporting", "reach", "--replace"])
+
+        self.assertEqual(result, 1)
+        self.assertIn("--replace requires", sys.stderr.getvalue())
+        load_credentials.assert_not_called()
+
     @patch("yt_tools.cli.build_reporting_api")
     @patch("yt_tools.cli.load_authorized_credentials")
     def test_reporting_job_create_returns_upstream_identity(

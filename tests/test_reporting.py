@@ -17,6 +17,7 @@ from yt_tools.reporting import (
     list_reporting_job_reports,
     list_reporting_jobs,
     list_report_types,
+    retrieve_thumbnail_reach_reports,
 )
 
 
@@ -384,6 +385,133 @@ class TestReportingJobReports(unittest.TestCase):
             "reports": [],
             "message": "No generated files are available for reporting job job-pending.",
         })
+
+
+class TestThumbnailReachWorkflow(unittest.TestCase):
+    def test_reuses_current_reach_basic_job_and_lists_every_generated_version(self):
+        api = MagicMock()
+        api.reportTypes.return_value.list.return_value.execute.return_value = {
+            "reportTypes": [
+                {
+                    "id": "channel_reach_basic_a1",
+                    "name": "Reach Basic",
+                    "deprecateTime": "2027-01-01T00:00:00Z",
+                },
+                {
+                    "id": "channel_reach_combined_a1",
+                    "name": "Reach Combined",
+                },
+                {
+                    "id": "channel_reach_basic_a2",
+                    "name": "Reach Basic",
+                },
+            ]
+        }
+        api.jobs.return_value.list.return_value.execute.return_value = {
+            "jobs": [{
+                "id": "reach-job",
+                "reportTypeId": "channel_reach_basic_a2",
+                "name": "Thumbnail reach",
+                "createTime": "2026-08-21T10:00:00Z",
+            }]
+        }
+        api.jobs.return_value.reports.return_value.list.return_value.execute.return_value = {
+            "reports": [
+                {
+                    "id": "report-original",
+                    "jobId": "reach-job",
+                    "startTime": "2026-08-19T00:00:00Z",
+                    "endTime": "2026-08-20T00:00:00Z",
+                    "createTime": "2026-08-20T06:00:00Z",
+                    "downloadUrl": "https://youtube.example/report-original",
+                },
+                {
+                    "id": "report-backfill",
+                    "jobId": "reach-job",
+                    "startTime": "2026-08-19T00:00:00Z",
+                    "endTime": "2026-08-20T00:00:00Z",
+                    "createTime": "2026-08-21T06:00:00Z",
+                    "downloadUrl": "https://youtube.example/report-backfill",
+                },
+            ]
+        }
+
+        result = retrieve_thumbnail_reach_reports(api)
+
+        self.assertEqual(result["state"], "available")
+        self.assertEqual(result["reportType"]["id"], "channel_reach_basic_a2")
+        self.assertEqual(result["job"]["id"], "reach-job")
+        self.assertEqual(result["jobDisposition"], "reused")
+        self.assertEqual(
+            [report["id"] for report in result["reports"]],
+            ["report-original", "report-backfill"],
+        )
+        self.assertEqual(result["fields"], [
+            {
+                "name": "video_thumbnail_impressions",
+                "meaning": "Video thumbnail impressions",
+            },
+            {
+                "name": "video_thumbnail_impressions_ctr",
+                "meaning": "Video thumbnail impression click-through rate",
+            },
+        ])
+        api.jobs.return_value.create.assert_not_called()
+
+    def test_creates_missing_reach_job_and_returns_pending_without_polling(self):
+        api = MagicMock()
+        api.reportTypes.return_value.list.return_value.execute.return_value = {
+            "reportTypes": [{
+                "id": "channel_reach_basic_future",
+                "name": "Reach Basic",
+            }]
+        }
+        api.jobs.return_value.list.return_value.execute.return_value = {"jobs": []}
+        api.jobs.return_value.create.return_value.execute.return_value = {
+            "id": "new-reach-job",
+            "reportTypeId": "channel_reach_basic_future",
+            "name": "yt-tools thumbnail reach",
+            "createTime": "2026-08-21T10:00:00Z",
+        }
+        api.jobs.return_value.reports.return_value.list.return_value.execute.return_value = {}
+
+        result = retrieve_thumbnail_reach_reports(api)
+
+        self.assertEqual(result["state"], "pending")
+        self.assertEqual(result["job"]["id"], "new-reach-job")
+        self.assertEqual(result["jobDisposition"], "created")
+        self.assertEqual(result["reports"], [])
+        self.assertIn("not yet available", result["message"])
+        api.jobs.return_value.create.assert_called_once_with(body={
+            "reportTypeId": "channel_reach_basic_future",
+            "name": "yt-tools thumbnail reach",
+        })
+        api.jobs.return_value.reports.return_value.list.assert_called_once_with(
+            jobId="new-reach-job"
+        )
+
+    def test_missing_current_reach_basic_type_is_actionable(self):
+        api = MagicMock()
+        api.reportTypes.return_value.list.return_value.execute.return_value = {
+            "reportTypes": [
+                {
+                    "id": "channel_reach_basic_old",
+                    "name": "Reach Basic",
+                    "deprecateTime": "2026-08-01T00:00:00Z",
+                },
+                {
+                    "id": "channel_reach_combined_a1",
+                    "name": "Reach Combined",
+                },
+            ]
+        }
+
+        with self.assertRaisesRegex(
+            ReportingDiscoveryError, "current non-deprecated Reach Basic"
+        ):
+            retrieve_thumbnail_reach_reports(api)
+
+        api.jobs.return_value.list.assert_not_called()
 
 
 class TestReportingFileDownloads(unittest.TestCase):

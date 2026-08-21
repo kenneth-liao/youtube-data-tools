@@ -181,6 +181,34 @@ types or `availability: "empty"` with an empty list and explanatory message.
 Authorization and Reporting API failures instead return a nonzero exit status
 with actionable details.
 
+## Retrieve thumbnail reach reports
+
+Establish the authorized channel's thumbnail reach workflow without waiting for
+Google to generate files:
+
+```bash
+yt-tools reporting reach
+```
+
+The command discovers the current non-deprecated `Reach Basic` type by upstream
+name and metadata, reuses a matching job or creates one when absent, and lists
+every generated version and backfill. If no file exists yet, the result returns
+`state: "pending"` with the job identity; it never reports zero impressions.
+Output identifies the Reporting CSV fields `video_thumbnail_impressions` and
+`video_thumbnail_impressions_ctr`. These are thumbnail reach metrics, not
+`ad_impressions`.
+
+Select one listed file and an explicit safe destination to download it:
+
+```bash
+yt-tools reporting reach \
+  --report-id <report-id> \
+  --destination /explicit/path/reach.csv
+```
+
+Use `--replace` only when an existing destination should be replaced. The
+workflow does not select Reach Combined, poll, aggregate files, or import data.
+
 ## Manage asynchronous reporting jobs
 
 Create a reporting job from an available report type ID and caller-selected
@@ -237,9 +265,9 @@ create another destination.
 
 An absent or unauthorized job, invalid report type, transfer failure, or other
 Reporting API failure returns a nonzero status with actionable details. All job
-commands support `--token-file` for an explicit stored authorization. They do
-not aggregate reports, import file contents, perform reach-specific
-orchestration, poll for generation, or delete older downloads.
+commands support `--token-file` for an explicit stored authorization. The
+generic job commands do not aggregate reports, import file contents, poll for
+generation, or delete older downloads.
 
 ## Usage
 
