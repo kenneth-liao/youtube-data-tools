@@ -319,14 +319,42 @@ yt-tools reporting jobs reports list \
 
 The command follows all response pages and preserves each report's upstream ID,
 job ID, covered start and end times, creation time, authenticated download URL,
-and other returned metadata. Reports are not deduplicated: files covering the
-same period remain distinct by report ID and creation time so backfills stay
-visible. A valid job with no generated files returns `availability: "empty"`
-with an empty `reports` list. Missing jobs and other upstream failures return
-nonzero actionable errors.
+and other returned metadata. Each item includes an identity-rich
+`suggestedFilename`. Reports are not deduplicated: files covering the same
+period remain distinct by report ID and creation time so versions and backfills
+stay visible. A valid job with no generated files returns
+`availability: "empty"` with an empty `reports` list. Missing jobs and other
+upstream failures return nonzero actionable errors.
 
-This command lists metadata only. It does not download or aggregate file
-contents, perform reach-specific orchestration, or poll for file generation.
+### `reporting jobs reports download`
+Download one selected generated reporting file.
+
+**Usage:**
+```bash
+yt-tools reporting jobs reports download \
+  --job-id <job-id> \
+  --report-id <report-id> \
+  --destination <path> \
+  [options]
+```
+
+**Required options:**
+- `--job-id <id>`: Stable upstream reporting job ID
+- `--report-id <id>`: Stable upstream generated report ID
+- `--destination <path>`: Exact local output file; its parent must exist
+
+**Optional parameters:**
+- `--replace`: Explicitly replace an existing destination after a complete download
+- `--token-file <path>`: Stored authorization override
+
+Bytes stream through authorized transport into a temporary file beside the
+selected destination. The destination appears only after the transfer
+completes. Without `--replace`, an existing file is preserved and the command
+fails. If a transfer is interrupted, no partial destination appears; during an
+explicit replacement, the existing complete file remains in place.
+
+The reports commands do not aggregate files, import data, perform reach-specific
+orchestration, poll for generation, or silently delete older downloads.
 
 ---
 

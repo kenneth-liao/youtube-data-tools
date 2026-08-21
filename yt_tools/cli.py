@@ -4,8 +4,10 @@ import json
 import os
 import sys
 from importlib import metadata
+from pathlib import Path
 from typing import List, Optional, Any
 from dotenv import load_dotenv, find_dotenv
+from google.auth.transport.requests import AuthorizedSession
 
 from yt_tools.analytics import (
     AnalyticsInputError,
@@ -26,6 +28,7 @@ from yt_tools.reporting import (
     build_reporting_api,
     create_reporting_job,
     delete_reporting_job,
+    download_reporting_job_report,
     list_reporting_job_reports,
     list_reporting_jobs,
     list_report_types,
@@ -304,10 +307,13 @@ def cmd_authorize(args: argparse.Namespace) -> int:
     return 0
 
 
-def _build_authorized_reporting_api(token_file: str | None):
+def _load_authorized_reporting_credentials(token_file: str | None):
     resolved_token = resolve_credential_paths(token_file=token_file).token_file
-    credentials = load_authorized_credentials(resolved_token)
-    return build_reporting_api(credentials)
+    return load_authorized_credentials(resolved_token)
+
+
+def _build_authorized_reporting_api(token_file: str | None):
+    return build_reporting_api(_load_authorized_reporting_credentials(token_file))
 
 
 def cmd_reporting_report_types(args: argparse.Namespace) -> int:
@@ -354,6 +360,29 @@ def cmd_reporting_job_reports_list(args: argparse.Namespace) -> int:
         )
     except (AuthorizationError, ReportingError) as error:
         raise ToolboxError(str(error)) from error
+    print_json(result)
+    return 0
+
+
+def cmd_reporting_job_report_download(args: argparse.Namespace) -> int:
+    """Download one selected reporting file to an explicit destination."""
+    transport = None
+    try:
+        credentials = _load_authorized_reporting_credentials(args.token_file)
+        transport = AuthorizedSession(credentials)
+        result = download_reporting_job_report(
+            build_reporting_api(credentials),
+            transport,
+            args.job_id,
+            args.report_id,
+            args.destination,
+            replace=args.replace,
+        )
+    except (AuthorizationError, ReportingError) as error:
+        raise ToolboxError(str(error)) from error
+    finally:
+        if transport is not None:
+            transport.close()
     print_json(result)
     return 0
 
@@ -592,6 +621,7 @@ Usage:
   yt-tools reporting jobs list [options]
   yt-tools reporting jobs delete --job-id <id> [options]
   yt-tools reporting jobs reports list --job-id <id> [options]
+  yt-tools reporting jobs reports download --job-id <id> --report-id <id> --destination <path> [options]
 """,
     "reporting-report-types": """
 List YouTube Reporting API report types available to the authorized channel.
@@ -610,6 +640,7 @@ Usage:
   yt-tools reporting jobs list [options]
   yt-tools reporting jobs delete --job-id <id> [options]
   yt-tools reporting jobs reports list --job-id <id> [options]
+  yt-tools reporting jobs reports download --job-id <id> --report-id <id> --destination <path> [options]
 """,
     "reporting-jobs-create": """
 Create an asynchronous reporting job.
@@ -637,10 +668,11 @@ Optional parameters:
   --token-file <path>           Stored authorization override
 """,
     "reporting-jobs-reports": """
-List generated reporting files for a selected reporting job.
+List or download generated reporting files for a selected reporting job.
 
 Usage:
   yt-tools reporting jobs reports list --job-id <id> [options]
+  yt-tools reporting jobs reports download --job-id <id> --report-id <id> --destination <path> [options]
 """,
     "reporting-jobs-reports-list": """
 List all generated reporting files for a selected reporting job.
@@ -649,6 +681,18 @@ Required options:
   --job-id <id>                 Upstream reporting job ID
 
 Optional parameters:
+  --token-file <path>           Stored authorization override
+""",
+    "reporting-jobs-reports-download": """
+Download one selected generated reporting file through authorized transport.
+
+Required options:
+  --job-id <id>                 Upstream reporting job ID
+  --report-id <id>              Upstream generated report ID
+  --destination <path>          Exact local output file
+
+Optional parameters:
+  --replace                     Explicitly replace an existing destination
   --token-file <path>           Stored authorization override
 """,
     "analytics": """
@@ -703,6 +747,10 @@ def _non_empty(value: str) -> str:
     if not value.strip():
         raise argparse.ArgumentTypeError("value must not be empty")
     return value
+
+
+def _destination_path(value: str) -> Path:
+    return Path(_non_empty(value))
 
 
 class CustomHelpParser(argparse.ArgumentParser):
@@ -921,6 +969,25 @@ def build_parser() -> argparse.ArgumentParser:
     )
     reporting_job_reports_list.add_argument("--token-file")
     reporting_job_reports_list.set_defaults(func=cmd_reporting_job_reports_list)
+    reporting_job_report_download = reporting_job_reports_sub.add_parser(
+        "download",
+        help="Download one selected reporting file",
+        custom_help_text=COMMAND_DOCS["reporting-jobs-reports-download"],
+    )
+    reporting_job_report_download.add_argument(
+        "--job-id", required=True, type=_non_empty
+    )
+    reporting_job_report_download.add_argument(
+        "--report-id", required=True, type=_non_empty
+    )
+    reporting_job_report_download.add_argument(
+        "--destination", required=True, type=_destination_path
+    )
+    reporting_job_report_download.add_argument("--replace", action="store_true")
+    reporting_job_report_download.add_argument("--token-file")
+    reporting_job_report_download.set_defaults(
+        func=cmd_reporting_job_report_download
+    )
 
     # Docs
     doc = sub.add_parser("docs", help="Display full documentation", custom_help_text=COMMAND_DOCS["docs"])
