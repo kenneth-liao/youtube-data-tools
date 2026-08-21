@@ -292,6 +292,60 @@ class TestCLI(unittest.TestCase):
         )
         self.assertIn("Authorization complete", sys.stdout.getvalue())
 
+    @patch("yt_tools.cli.build_reporting_api")
+    @patch("yt_tools.cli.load_authorized_credentials")
+    def test_reporting_report_types_outputs_agent_selectable_json(
+        self,
+        load_credentials,
+        build_api,
+    ):
+        api = MagicMock()
+        build_api.return_value = api
+        api.reportTypes.return_value.list.return_value.execute.return_value = {
+            "reportTypes": [{
+                "id": "channel_reach_basic_a42",
+                "name": "Reach Basic",
+                "systemManaged": False,
+            }]
+        }
+
+        result = cli.main([
+            "reporting", "report-types",
+            "--token-file", "/secure/token.json",
+        ])
+
+        self.assertEqual(result, 0)
+        load_credentials.assert_called_once_with(Path("/secure/token.json"))
+        build_api.assert_called_once_with(load_credentials.return_value)
+        self.assertEqual(json.loads(sys.stdout.getvalue()), {
+            "availability": "available",
+            "reportTypes": [{
+                "id": "channel_reach_basic_a42",
+                "name": "Reach Basic",
+                "systemManaged": False,
+                "isReachReport": True,
+            }],
+        })
+
+    @patch("yt_tools.cli.build_reporting_api")
+    @patch("yt_tools.cli.load_authorized_credentials")
+    def test_reporting_authorization_failure_is_distinct_from_empty_availability(
+        self,
+        load_credentials,
+        build_api,
+    ):
+        load_credentials.side_effect = AuthorizationError(
+            "Stored authorization refresh failed. Run yt-tools authorize again."
+        )
+
+        result = cli.main(["reporting", "report-types"])
+
+        self.assertEqual(result, 1)
+        self.assertEqual(sys.stdout.getvalue(), "")
+        self.assertIn("refresh failed", sys.stderr.getvalue())
+        self.assertIn("authorize again", sys.stderr.getvalue())
+        build_api.assert_not_called()
+
     @patch("yt_tools.cli.build_data_api")
     @patch("yt_tools.cli.build_analytics_api")
     @patch("yt_tools.cli.load_authorized_credentials")

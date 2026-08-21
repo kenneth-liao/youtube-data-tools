@@ -241,6 +241,26 @@ fabricated zero values or prose analysis.
 
 ---
 
+### `reporting report-types`
+List YouTube Reporting API report types available to the authorized channel.
+
+**Usage:**
+```bash
+yt-tools reporting report-types [options]
+```
+
+**Optional parameters:**
+- `--token-file <path>`: Stored authorization override
+
+The command follows all response pages and returns JSON structured for report
+type selection. Each item preserves its upstream ID, name, optional
+`deprecateTime`, and `systemManaged` status. `isReachReport` identifies reach
+reports from the upstream name instead of a versioned ID. Successful empty
+availability is explicit and distinct from actionable authorization or API
+failures. The command does not support content-owner impersonation.
+
+---
+
 ### `docs`
 Show this full documentation.
 
