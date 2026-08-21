@@ -214,15 +214,32 @@ yt-tools reporting jobs reports list --job-id <job-id>
 
 The command follows every response page and preserves each report's upstream
 ID, job ID, covered start and end times, creation time, and authenticated
-download URL. Files for the same period remain distinct, so later backfills are
-visible. A valid job with no generated files returns explicit empty availability
-rather than an error.
+download URL. It also returns an identity-rich `suggestedFilename`. Files for
+the same period remain distinct, so later versions and backfills are visible. A
+valid job with no generated files returns explicit empty availability rather
+than an error.
 
-An absent or unauthorized job, invalid report type, or other Reporting API
-failure returns a nonzero status with the upstream HTTP status and actionable
-details. All job commands support `--token-file` for an explicit stored
-authorization. They do not download or aggregate file contents, perform
-reach-specific orchestration, or wait for YouTube to generate a reporting file.
+Download one selected report to an exact local output file:
+
+```bash
+yt-tools reporting jobs reports download \
+  --job-id <job-id> \
+  --report-id <report-id> \
+  --destination /explicit/path/report.csv
+```
+
+The command resolves the stable job and report identities, streams bytes through
+authorized transport, and publishes the destination only after the download is
+complete. An existing destination is preserved unless `--replace` is explicit.
+A failed or interrupted replacement also preserves the prior complete file.
+Parent directories must already exist; the command does not silently select or
+create another destination.
+
+An absent or unauthorized job, invalid report type, transfer failure, or other
+Reporting API failure returns a nonzero status with actionable details. All job
+commands support `--token-file` for an explicit stored authorization. They do
+not aggregate reports, import file contents, perform reach-specific
+orchestration, poll for generation, or delete older downloads.
 
 ## Usage
 

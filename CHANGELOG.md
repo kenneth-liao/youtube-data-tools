@@ -27,6 +27,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   stable upstream identity. (#10)
 - Add paginated generated-file discovery for selected reporting jobs with
   preserved download identity and explicit pending availability. (#11)
+- Add authorized streaming downloads to explicit atomic destinations with
+  opt-in replacement and identity-rich suggested filenames. (#12)
 
 ### Fixed
 

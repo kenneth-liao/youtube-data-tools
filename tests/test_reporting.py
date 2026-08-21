@@ -1,15 +1,19 @@
 import json
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from googleapiclient.errors import HttpError
 
 from yt_tools.reporting import (
     ReportingDiscoveryError,
+    ReportingDownloadError,
     ReportingJobError,
     build_reporting_api,
     create_reporting_job,
     delete_reporting_job,
+    download_reporting_job_report,
     list_reporting_job_reports,
     list_reporting_jobs,
     list_report_types,
@@ -325,6 +329,9 @@ class TestReportingJobReports(unittest.TestCase):
                     "endTime": "2026-08-20T00:00:00Z",
                     "createTime": "2026-08-20T06:00:00Z",
                     "downloadUrl": "https://youtube.example/report-original",
+                    "suggestedFilename": (
+                        "job-123__report-original__20260820T060000Z.csv"
+                    ),
                 },
                 {
                     "id": "report-backfill",
@@ -333,6 +340,9 @@ class TestReportingJobReports(unittest.TestCase):
                     "endTime": "2026-08-20T00:00:00Z",
                     "createTime": "2026-08-21T06:00:00Z",
                     "downloadUrl": "https://youtube.example/report-backfill",
+                    "suggestedFilename": (
+                        "job-123__report-backfill__20260821T060000Z.csv"
+                    ),
                 },
             ],
         })
@@ -374,6 +384,155 @@ class TestReportingJobReports(unittest.TestCase):
             "reports": [],
             "message": "No generated files are available for reporting job job-pending.",
         })
+
+
+class TestReportingFileDownloads(unittest.TestCase):
+    def test_selected_report_is_streamed_to_the_explicit_destination(self):
+        api = MagicMock()
+        api.jobs.return_value.reports.return_value.get.return_value.execute.return_value = {
+            "id": "report-123",
+            "jobId": "job-123",
+            "downloadUrl": "https://youtube.example/report-123",
+        }
+        response = MagicMock()
+        response.iter_content.return_value = [b"video_id,views\n", b"abc,42\n"]
+        transport = MagicMock()
+        transport.get.return_value.__enter__.return_value = response
+
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / "selected.csv"
+
+            result = download_reporting_job_report(
+                api, transport, "job-123", "report-123", destination
+            )
+
+            self.assertEqual(destination.read_bytes(), b"video_id,views\nabc,42\n")
+            self.assertEqual(result, {
+                "jobId": "job-123",
+                "reportId": "report-123",
+                "destination": str(destination),
+                "status": "downloaded",
+            })
+        api.jobs.return_value.reports.return_value.get.assert_called_once_with(
+            jobId="job-123", reportId="report-123"
+        )
+        transport.get.assert_called_once_with(
+            "https://youtube.example/report-123", stream=True
+        )
+
+    def test_interrupted_download_leaves_no_destination_or_partial_file(self):
+        api = MagicMock()
+        api.jobs.return_value.reports.return_value.get.return_value.execute.return_value = {
+            "id": "report-123",
+            "jobId": "job-123",
+            "downloadUrl": "https://youtube.example/report-123",
+        }
+        response = MagicMock()
+        response.iter_content.side_effect = KeyboardInterrupt()
+        transport = MagicMock()
+        transport.get.return_value.__enter__.return_value = response
+
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / "selected.csv"
+
+            with self.assertRaises(KeyboardInterrupt):
+                download_reporting_job_report(
+                    api, transport, "job-123", "report-123", destination
+                )
+
+            self.assertFalse(destination.exists())
+            self.assertEqual(list(Path(directory).iterdir()), [])
+
+    def test_existing_destination_is_preserved_without_replace(self):
+        api = MagicMock()
+        transport = MagicMock()
+
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / "selected.csv"
+            destination.write_bytes(b"existing")
+
+            with self.assertRaisesRegex(
+                ReportingDownloadError, "already exists.*--replace"
+            ):
+                download_reporting_job_report(
+                    api, transport, "job-123", "report-123", destination
+                )
+
+            self.assertEqual(destination.read_bytes(), b"existing")
+        api.jobs.return_value.reports.return_value.get.assert_not_called()
+        transport.get.assert_not_called()
+
+    def test_invalid_local_destination_fails_before_authenticated_requests(self):
+        api = MagicMock()
+        transport = MagicMock()
+
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / "missing" / "selected.csv"
+
+            with self.assertRaisesRegex(
+                ReportingDownloadError, "Destination parent does not exist"
+            ):
+                download_reporting_job_report(
+                    api, transport, "job-123", "report-123", destination
+                )
+
+        api.jobs.return_value.reports.return_value.get.assert_not_called()
+        transport.get.assert_not_called()
+
+    def test_failed_explicit_replacement_preserves_existing_complete_file(self):
+        api = MagicMock()
+        api.jobs.return_value.reports.return_value.get.return_value.execute.return_value = {
+            "downloadUrl": "https://youtube.example/report-123",
+        }
+        response = MagicMock()
+        response.iter_content.side_effect = OSError("connection reset")
+        transport = MagicMock()
+        transport.get.return_value.__enter__.return_value = response
+
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / "selected.csv"
+            destination.write_bytes(b"existing")
+
+            with self.assertRaisesRegex(
+                ReportingDownloadError, "download failed.*connection reset"
+            ):
+                download_reporting_job_report(
+                    api,
+                    transport,
+                    "job-123",
+                    "report-123",
+                    destination,
+                    replace=True,
+                )
+
+            self.assertEqual(destination.read_bytes(), b"existing")
+            self.assertEqual(list(Path(directory).iterdir()), [destination])
+
+    def test_explicit_replace_atomically_publishes_the_complete_download(self):
+        api = MagicMock()
+        api.jobs.return_value.reports.return_value.get.return_value.execute.return_value = {
+            "downloadUrl": "https://youtube.example/report-123",
+        }
+        response = MagicMock()
+        response.iter_content.return_value = [b"replacement"]
+        transport = MagicMock()
+        transport.get.return_value.__enter__.return_value = response
+
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / "selected.csv"
+            destination.write_bytes(b"existing")
+
+            download_reporting_job_report(
+                api,
+                transport,
+                "job-123",
+                "report-123",
+                destination,
+                replace=True,
+            )
+
+            self.assertEqual(destination.read_bytes(), b"replacement")
+            self.assertEqual(list(Path(directory).iterdir()), [destination])
 
 
 if __name__ == "__main__":

@@ -508,6 +508,66 @@ class TestCLI(unittest.TestCase):
         self.assertIn("request failed (404)", sys.stderr.getvalue())
         self.assertIn("Reporting job not found", sys.stderr.getvalue())
 
+    @patch("yt_tools.cli.download_reporting_job_report")
+    @patch("yt_tools.cli.AuthorizedSession")
+    @patch("yt_tools.cli.build_reporting_api")
+    @patch("yt_tools.cli.load_authorized_credentials")
+    def test_reporting_file_download_uses_selected_identity_and_destination(
+        self,
+        load_credentials,
+        build_api,
+        authorized_session,
+        download_report,
+    ):
+        credentials = MagicMock()
+        api = MagicMock()
+        transport = MagicMock()
+        load_credentials.return_value = credentials
+        build_api.return_value = api
+        authorized_session.return_value = transport
+        download_report.return_value = {
+            "jobId": "job-123",
+            "reportId": "report-456",
+            "destination": "/exports/report.csv",
+            "status": "downloaded",
+        }
+
+        result = cli.main([
+            "reporting", "jobs", "reports", "download",
+            "--job-id", "job-123",
+            "--report-id", "report-456",
+            "--destination", "/exports/report.csv",
+            "--replace",
+        ])
+
+        self.assertEqual(result, 0)
+        download_report.assert_called_once_with(
+            api,
+            transport,
+            "job-123",
+            "report-456",
+            Path("/exports/report.csv"),
+            replace=True,
+        )
+        self.assertEqual(json.loads(sys.stdout.getvalue()), {
+            "jobId": "job-123",
+            "reportId": "report-456",
+            "destination": "/exports/report.csv",
+            "status": "downloaded",
+        })
+
+    def test_reporting_file_download_rejects_empty_destination_before_authorization(self):
+        with patch("yt_tools.cli.load_authorized_credentials") as load_credentials:
+            with self.assertRaises(SystemExit):
+                cli.main([
+                    "reporting", "jobs", "reports", "download",
+                    "--job-id", "job-123",
+                    "--report-id", "report-456",
+                    "--destination", "",
+                ])
+
+        load_credentials.assert_not_called()
+
     @patch("yt_tools.cli.build_reporting_api")
     @patch("yt_tools.cli.load_authorized_credentials")
     def test_reporting_job_delete_outputs_explicit_success(

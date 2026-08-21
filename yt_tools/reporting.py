@@ -1,3 +1,8 @@
+import os
+import re
+import tempfile
+from pathlib import Path
+
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
@@ -14,6 +19,10 @@ class ReportingDiscoveryError(ReportingError):
 
 class ReportingJobError(ReportingError):
     """An actionable failure while managing asynchronous reporting jobs."""
+
+
+class ReportingDownloadError(ReportingError):
+    """An actionable failure while downloading one reporting file."""
 
 
 def _execute_job_request(operation):
@@ -75,6 +84,83 @@ def list_reporting_jobs(api) -> dict:
             return {"jobs": jobs}
 
 
+def suggested_reporting_filename(report: dict) -> str:
+    """Return a CSV filename that keeps stable report and backfill identity."""
+    components = [report.get("jobId", "job"), report["id"]]
+    if report.get("createTime"):
+        components.append(re.sub(r"[^A-Za-z0-9]", "", report["createTime"]))
+    safe_components = [
+        re.sub(r"[^A-Za-z0-9._-]+", "_", str(component)).strip("._-")
+        for component in components
+    ]
+    return "__".join(safe_components) + ".csv"
+
+
+def download_reporting_job_report(
+    api,
+    authorized_transport,
+    job_id: str,
+    report_id: str,
+    destination: str | Path,
+    *,
+    replace: bool = False,
+) -> dict:
+    """Stream one selected reporting file to an explicit local destination."""
+    destination = Path(destination)
+    if not destination.parent.is_dir():
+        raise ReportingDownloadError(
+            f"Destination parent does not exist: {destination.parent}"
+        )
+    if destination.is_dir():
+        raise ReportingDownloadError(
+            f"Destination must be a file path: {destination}"
+        )
+    if destination.exists() and not replace:
+        raise ReportingDownloadError(
+            f"Destination already exists: {destination}. Use --replace to replace it."
+        )
+    report = _execute_job_request(
+        lambda: api.jobs().reports().get(jobId=job_id, reportId=report_id)
+    )
+    descriptor, temporary_name = tempfile.mkstemp(
+        dir=destination.parent,
+        prefix=f".{destination.name}.",
+        suffix=".part",
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "wb") as output:
+            with authorized_transport.get(report["downloadUrl"], stream=True) as response:
+                response.raise_for_status()
+                for chunk in response.iter_content(chunk_size=1024 * 1024):
+                    if chunk:
+                        output.write(chunk)
+        if replace:
+            os.replace(temporary, destination)
+        else:
+            try:
+                os.link(temporary, destination)
+            except FileExistsError as error:
+                raise ReportingDownloadError(
+                    f"Destination already exists: {destination}. Use --replace to replace it."
+                ) from error
+            temporary.unlink()
+    except ReportingDownloadError:
+        raise
+    except Exception as error:
+        raise ReportingDownloadError(
+            f"Reporting file download failed: {error}"
+        ) from error
+    finally:
+        temporary.unlink(missing_ok=True)
+    return {
+        "jobId": job_id,
+        "reportId": report_id,
+        "destination": str(destination),
+        "status": "downloaded",
+    }
+
+
 def list_reporting_job_reports(api, job_id: str) -> dict:
     """List generated reporting files for one reporting job."""
     reports = []
@@ -86,7 +172,13 @@ def list_reporting_job_reports(api, job_id: str) -> dict:
         response = _execute_job_request(
             lambda: api.jobs().reports().list(**parameters)
         )
-        reports.extend(response.get("reports", []))
+        reports.extend(
+            {
+                **report,
+                "suggestedFilename": suggested_reporting_filename(report),
+            }
+            for report in response.get("reports", [])
+        )
         page_token = response.get("nextPageToken")
         if not page_token:
             result = {
