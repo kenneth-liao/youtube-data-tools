@@ -21,6 +21,11 @@ from yt_tools.auth import (
     resolve_credential_paths,
 )
 from yt_tools.core import YouTubeService
+from yt_tools.reporting import (
+    ReportingDiscoveryError,
+    build_reporting_api,
+    list_report_types,
+)
 from yt_tools.snapshot import (
     create_analytics_snapshot,
     resolve_snapshot_range,
@@ -295,6 +300,18 @@ def cmd_authorize(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_reporting_report_types(args: argparse.Namespace) -> int:
+    """List Reporting API report types available to the authorized channel."""
+    try:
+        token_file = resolve_credential_paths(token_file=args.token_file).token_file
+        credentials = load_authorized_credentials(token_file)
+        result = list_report_types(build_reporting_api(credentials))
+    except (AuthorizationError, ReportingDiscoveryError) as error:
+        raise ToolboxError(str(error)) from error
+    print_json(result)
+    return 0
+
+
 def cmd_analytics_query(args: argparse.Namespace) -> int:
     """Run a synchronous analytics query for an authorized channel."""
     try:
@@ -392,6 +409,7 @@ Commands:
   trending     Get trending videos
   authorize    Authorize access to an owned YouTube channel
   analytics    Query analytics or retrieve a performance snapshot
+  reporting    Discover asynchronous reporting resources
   docs         Show full documentation
 
 Environment Variables:
@@ -506,6 +524,21 @@ Options:
   --client-secrets <path>       Google OAuth client-secret source file (required)
   --client-config-file <path>   Stored client configuration destination
   --token-file <path>           Stored refreshable token destination
+""",
+    "reporting": """
+Discover asynchronous reporting resources for an authorized channel.
+
+Usage:
+  yt-tools reporting report-types [options]
+""",
+    "reporting-report-types": """
+List YouTube Reporting API report types available to the authorized channel.
+
+Usage:
+  yt-tools reporting report-types [options]
+
+Optional parameters:
+  --token-file <path>           Stored authorization override
 """,
     "analytics": """
 Retrieve analytics for an authorized channel.
@@ -695,6 +728,25 @@ def build_parser() -> argparse.ArgumentParser:
     analytics_snapshot.add_argument("--token-file")
     analytics_snapshot.add_argument("--no-comparison", action="store_true")
     analytics_snapshot.set_defaults(func=cmd_analytics_snapshot)
+
+    # Reporting
+    reporting = sub.add_parser(
+        "reporting",
+        help="Discover asynchronous reporting resources",
+        custom_help_text=COMMAND_DOCS["reporting"],
+    )
+    reporting_sub = reporting.add_subparsers(
+        dest="reporting_cmd",
+        required=True,
+        parser_class=CustomHelpParser,
+    )
+    reporting_report_types = reporting_sub.add_parser(
+        "report-types",
+        help="List report types available to the authorized channel",
+        custom_help_text=COMMAND_DOCS["reporting-report-types"],
+    )
+    reporting_report_types.add_argument("--token-file")
+    reporting_report_types.set_defaults(func=cmd_reporting_report_types)
 
     # Docs
     doc = sub.add_parser("docs", help="Display full documentation", custom_help_text=COMMAND_DOCS["docs"])

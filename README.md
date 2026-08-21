@@ -161,6 +161,27 @@ its daily rows. Processing delays can make these ranges differ. An empty period
 has `null` period values, an empty daily row array, and a `null` returned range;
 the command does not create zero values or prose analysis.
 
+## Discover available reporting types
+
+List the asynchronous Reporting API report types available to the authorized
+channel:
+
+```bash
+yt-tools reporting report-types
+```
+
+Use `--token-file` to select an explicit stored authorization. The JSON result
+preserves each upstream report type ID, name, optional deprecation time, and
+system-managed status. `isReachReport` identifies reach report types from their
+upstream names, so selection does not depend on a versioned report type ID.
+Pagination is automatic.
+
+A successful response uses `availability: "available"` with selectable report
+types or `availability: "empty"` with an empty list and explanatory message.
+Authorization and Reporting API failures instead return a nonzero exit status
+with actionable details. This command does not create reporting jobs or access
+generated files.
+
 ## Usage
 
 Each subcommand also supports a `-h` or `--help` option for detailed usage information (e.g., `yt-tools search -h`).

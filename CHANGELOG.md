@@ -21,6 +21,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   period aggregates, daily trends, and actual returned ranges. (#6)
 - Compare analytics snapshots with the preceding equal-length period by default,
   including explicit absolute and percentage changes. (#7)
+- Add authorized Reporting API report-type discovery with paginated,
+  agent-selectable JSON output and reach-report identification. (#9)
 
 ### Fixed
 
