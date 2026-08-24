@@ -586,7 +586,8 @@ Usage:
   yt-tools channel <channel_id> [options]
 
 Arguments:
-  channel_id      YouTube Channel ID or URL
+  channel_id      Channel identity: raw UC… channel ID, /channel/UC… URL,
+                  @handle, or handle URL
 
 Options:
   --json          Output results in JSON format
@@ -769,7 +770,8 @@ Required options:
 Optional parameters:
   --dimensions <names>          Comma-separated dimension names
   --filters <expression>        Analytics API filter expression
-  --sort <names>                Comma-separated sort fields
+  --sort <names>                Comma-separated sort fields; use --sort=-views
+                                for descending fields
   --max-results <int>           Maximum rows to return
   --start-index <int>           One-based first row
   --currency <code>             Currency for monetary metrics
@@ -860,7 +862,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     # Channel
     c = sub.add_parser("channel", help="Get channel details", custom_help_text=COMMAND_DOCS["channel"])
-    c.add_argument("channel_id", help="YouTube Channel ID or URL")
+    c.add_argument(
+        "channel_id",
+        help="Raw UC channel ID, /channel/ URL, @handle, or handle URL",
+    )
     c.add_argument("--json", action="store_true", help="Output JSON")
     c.set_defaults(func=cmd_channel)
 

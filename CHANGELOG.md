@@ -35,4 +35,6 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Accept channel IDs, channel URLs, handles, and handle URLs in `channel`, and
+  document descending analytics sort syntax in command help. (#26)
 - Preserve stored credentials when reauthorization is denied or fails. (#15)

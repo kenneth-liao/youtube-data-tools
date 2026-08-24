@@ -56,7 +56,8 @@ yt-tools channel <channel_id> [options]
 ```
 
 **Arguments:**
-- `channel_id`: YouTube Channel ID or URL
+- `channel_id`: Channel identity: raw UC… channel ID, `/channel/UC…` URL,
+  `@handle`, or handle URL
 
 **Options:**
 - `-h, --help`: Show help message for the 'channel' command

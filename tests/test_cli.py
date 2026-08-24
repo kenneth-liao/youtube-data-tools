@@ -145,6 +145,24 @@ class TestCLI(unittest.TestCase):
         self.assertIn("My Channel", output)
         self.assertIn("500", output)
 
+    def test_channel_help_lists_every_accepted_identity_shape(self):
+        with self.assertRaises(SystemExit) as raised:
+            cli.main(["channel", "-h"])
+
+        self.assertEqual(raised.exception.code, 0)
+        output = sys.stdout.getvalue()
+        for shape in ("raw UC", "/channel/UC", "@handle", "handle URL"):
+            with self.subTest(shape=shape):
+                self.assertIn(shape, output)
+
+    def test_full_docs_list_every_accepted_channel_identity_shape(self):
+        self.assertEqual(cli.main(["docs"]), 0)
+
+        output = sys.stdout.getvalue()
+        for shape in ("raw UC", "/channel/UC", "@handle", "handle URL"):
+            with self.subTest(shape=shape):
+                self.assertIn(shape, output)
+
     @patch('yt_tools.cli._get_service')
     def test_transcript_command(self, mock_get_service):
         mock_service = MagicMock()
@@ -716,6 +734,28 @@ class TestCLI(unittest.TestCase):
             "id": "job-123",
             "status": "deleted",
         })
+
+    def test_analytics_query_help_explains_descending_sort_syntax(self):
+        with self.assertRaises(SystemExit) as raised:
+            cli.main(["analytics", "query", "-h"])
+
+        self.assertEqual(raised.exception.code, 0)
+        self.assertIn("--sort=-views", sys.stdout.getvalue())
+        self.assertIn("descending", sys.stdout.getvalue())
+
+    def test_descending_sort_without_equals_keeps_argparse_error(self):
+        with self.assertRaises(SystemExit) as raised:
+            cli.main([
+                "analytics", "query",
+                "--channel", "MINE",
+                "--start-date", "2026-08-01",
+                "--end-date", "2026-08-02",
+                "--metrics", "views",
+                "--sort", "-views",
+            ])
+
+        self.assertEqual(raised.exception.code, 2)
+        self.assertIn("argument --sort: expected one argument", sys.stderr.getvalue())
 
     @patch("yt_tools.cli.build_data_api")
     @patch("yt_tools.cli.build_analytics_api")
