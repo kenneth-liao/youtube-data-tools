@@ -33,6 +33,32 @@ class YouTubeService:
             return url
         return url
     
+    def _parse_channel_identity(self, identity: str) -> Dict[str, str]:
+        """Parse a channel identity into YouTube Data API lookup parameters."""
+        error = ValueError(
+            "Channel identity must be a raw UC… channel ID, /channel/UC… URL, "
+            "@handle, or handle URL."
+        )
+        if not isinstance(identity, str):
+            raise error
+        if re.fullmatch(r"UC[A-Za-z0-9_-]{22}", identity):
+            return {"id": identity}
+        channel_url = re.fullmatch(
+            r"https?://(?:www\.)?youtube\.com/channel/(UC[A-Za-z0-9_-]{22})/?",
+            identity,
+        )
+        if channel_url:
+            return {"id": channel_url.group(1)}
+        handle_url = re.fullmatch(
+            r"https?://(?:www\.)?youtube\.com/(@[^\s/?#]+)/?",
+            identity,
+        )
+        if handle_url:
+            return {"forHandle": handle_url.group(1)}
+        if re.fullmatch(r"@[^\s/?#]+", identity):
+            return {"forHandle": identity}
+        raise error
+
     def normalize_region_code(self, region_code: str) -> str:
         """
         Convert region codes to valid ISO 3166-1 alpha-2 country codes
@@ -98,12 +124,12 @@ class YouTubeService:
         """
         Get detailed information about a specific YouTube channel
         """
-        channel_id = self.parse_url(channel_id)
+        lookup = self._parse_channel_identity(channel_id)
         
         try:
             response = self.youtube.channels().list(
                 part='snippet,statistics',
-                id=channel_id
+                **lookup,
             ).execute()
             return response
         except HttpError as e:
