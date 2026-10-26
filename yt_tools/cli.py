@@ -1,5 +1,6 @@
 import argparse
 import csv
+import difflib
 import json
 import os
 import sys
@@ -19,7 +20,9 @@ from yt_tools.analytics import (
 from yt_tools.auth import (
     AuthorizationError,
     authorize,
+    authorize_write,
     load_authorized_credentials,
+    load_write_credentials,
     resolve_credential_paths,
 )
 from yt_tools.core import YouTubeService
@@ -44,6 +47,11 @@ from yt_tools.video_metadata import (
     VideoMetadataError,
     build_data_api,
     enrich_video_rows,
+)
+from yt_tools.video_update import (
+    VideoUpdateError,
+    update_video_metadata,
+    validate_update_fields,
 )
 
 def _load_api_key_environment() -> None:
@@ -300,12 +308,123 @@ def cmd_trending(args: argparse.Namespace) -> int:
 
 def cmd_authorize(args: argparse.Namespace) -> int:
     """Authorize access to an owned YouTube channel."""
-    paths = resolve_credential_paths(args.client_config_file, args.token_file)
+    paths = resolve_credential_paths(
+        args.client_config_file, args.token_file, args.write_token_file
+    )
+    if args.write:
+        client_secrets = (
+            Path(args.client_secrets) if args.client_secrets else paths.client_config_file
+        )
+        if not args.client_secrets and not client_secrets.is_file():
+            raise ToolboxError(
+                f"No stored client configuration at {client_secrets}. "
+                "Pass --client-secrets <file>, or run "
+                "yt-tools authorize --client-secrets <file> first."
+            )
+        try:
+            authorize_write(client_secrets, paths.write_token_file, paths.token_file)
+        except AuthorizationError as error:
+            raise ToolboxError(str(error)) from error
+        print(
+            "Write authorization complete. "
+            f"Write token stored in {paths.write_token_file}"
+        )
+        return 0
+    if not args.client_secrets:
+        raise ToolboxError(
+            "--client-secrets is required unless --write reuses the stored client."
+        )
     try:
         authorize(args.client_secrets, paths.client_config_file, paths.token_file)
     except AuthorizationError as error:
         raise ToolboxError(str(error)) from error
     print(f"Authorization complete. Credentials stored in {paths.token_file.parent}")
+    return 0
+
+
+def _read_description_file(source: str) -> str:
+    try:
+        text = sys.stdin.read() if source == "-" else Path(source).read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as error:
+        raise ToolboxError(f"Cannot read description file {source}: {error}") from error
+    return text.rstrip("\n")
+
+
+def _print_update_value(field: str, value) -> None:
+    if field == "tags":
+        print(f"  {', '.join(value) if value else '(none)'}")
+    else:
+        for line in (value or "").splitlines() or [""]:
+            print(f"  {line}")
+
+
+def _print_update_result(result: dict) -> None:
+    video_id = result["videoId"]
+    if not result["changes"]:
+        print(f"No changes for {video_id}: the requested values match the current video.")
+        return
+    if result["applied"]:
+        print(f"Saved changes to {video_id}. Current values:")
+        for field, value in result["saved"].items():
+            if field in result["changes"]:
+                print(f"{field}:")
+                _print_update_value(field, value)
+        return
+
+    print(f"Preview for {video_id}. Nothing saved; re-run with --apply to save.")
+    for field, change in result["changes"].items():
+        print(f"\n{field}:")
+        if field == "description":
+            diff = difflib.unified_diff(
+                (change["current"] or "").splitlines(),
+                change["proposed"].splitlines(),
+                "current",
+                "proposed",
+                lineterm="",
+            )
+            for line in diff:
+                print(f"  {line}")
+        else:
+            print(" current:")
+            _print_update_value(field, change["current"])
+            print(" proposed:")
+            _print_update_value(field, change["proposed"])
+
+
+def cmd_update(args: argparse.Namespace) -> int:
+    """Preview or save title, description, and tag changes to an owned video."""
+    description = args.description
+    if args.description_file:
+        description = _read_description_file(args.description_file)
+    tags = None
+    if args.clear_tags:
+        tags = []
+    elif args.tags is not None:
+        tags = [tag.strip() for tag in args.tags.split(",") if tag.strip()]
+        if not tags:
+            raise ToolboxError(
+                "--tags contains no tags. Use --clear-tags to remove all tags."
+            )
+    try:
+        validate_update_fields(args.title, description, tags)
+        write_token = resolve_credential_paths(
+            write_token_file=args.write_token_file
+        ).write_token_file
+        credentials = load_write_credentials(write_token)
+        result = update_video_metadata(
+            build_data_api(credentials),
+            args.video_id,
+            title=args.title,
+            description=description,
+            tags=tags,
+            apply=args.apply,
+        )
+    except (AuthorizationError, VideoMetadataError, VideoUpdateError) as error:
+        raise ToolboxError(str(error)) from error
+    if args.json:
+        print_json(result)
+    else:
+        _print_update_result(result)
     return 0
 
 
@@ -537,6 +656,7 @@ Commands:
   related      Get related videos
   trending     Get trending videos
   authorize    Authorize access to an owned YouTube channel
+  update       Preview or save an owned video's title, description, or tags
   analytics    Query analytics or retrieve a performance snapshot
   reporting    Discover asynchronous reporting resources
   docs         Show full documentation
@@ -649,11 +769,36 @@ Authorize access to an owned YouTube channel.
 
 Usage:
   yt-tools authorize --client-secrets <source> [options]
+  yt-tools authorize --write [options]
 
 Options:
-  --client-secrets <path>       Google OAuth client-secret source file (required)
+  --client-secrets <path>       Google OAuth client-secret source file
+                                (required without --write; with --write,
+                                defaults to the stored client configuration)
   --client-config-file <path>   Stored client configuration destination
   --token-file <path>           Stored refreshable token destination
+  --write                       Grant opt-in write access in a separate token
+  --write-token-file <path>     Stored write token destination
+""",
+    "update": """
+Preview or save title, description, and tag changes to an owned video.
+Without --apply, prints the changes and saves nothing.
+Requires the opt-in write grant: yt-tools authorize --write
+
+Usage:
+  yt-tools update <video_id> [fields] [options]
+
+Fields (at least one):
+  --title <text>                New title
+  --description <text>          New description
+  --description-file <path>     Read the new description from a file (- for stdin)
+  --tags <a,b,c>                Replace tags with a comma-separated list
+  --clear-tags                  Remove all tags
+
+Options:
+  --apply                       Save the changes
+  --json                        Output the result as JSON
+  --write-token-file <path>     Stored write token override
 """,
     "reporting": """
 Discover asynchronous reporting resources for an authorized channel.
@@ -905,10 +1050,31 @@ def build_parser() -> argparse.ArgumentParser:
         help="Authorize access to an owned YouTube channel",
         custom_help_text=COMMAND_DOCS["authorize"],
     )
-    auth.add_argument("--client-secrets", required=True, help="Google OAuth client-secret source file")
+    auth.add_argument("--client-secrets", help="Google OAuth client-secret source file")
     auth.add_argument("--client-config-file", help="Stored client configuration destination")
     auth.add_argument("--token-file", help="Stored refreshable token destination")
+    auth.add_argument("--write", action="store_true", help="Grant opt-in write access in a separate token")
+    auth.add_argument("--write-token-file", help="Stored write token destination")
     auth.set_defaults(func=cmd_authorize)
+
+    # Video metadata update
+    upd = sub.add_parser(
+        "update",
+        help="Preview or save an owned video's title, description, or tags",
+        custom_help_text=COMMAND_DOCS["update"],
+    )
+    upd.add_argument("video_id", help="Owned video ID")
+    upd.add_argument("--title", help="New title")
+    description_group = upd.add_mutually_exclusive_group()
+    description_group.add_argument("--description", help="New description")
+    description_group.add_argument("--description-file", help="Read the new description from a file (- for stdin)")
+    tags_group = upd.add_mutually_exclusive_group()
+    tags_group.add_argument("--tags", help="Replace tags with a comma-separated list")
+    tags_group.add_argument("--clear-tags", action="store_true", help="Remove all tags")
+    upd.add_argument("--apply", action="store_true", help="Save the changes")
+    upd.add_argument("--json", action="store_true", help="Output the result as JSON")
+    upd.add_argument("--write-token-file", help="Stored write token override")
+    upd.set_defaults(func=cmd_update)
 
     # Analytics
     analytics = sub.add_parser(

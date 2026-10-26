@@ -10,9 +10,12 @@ from oauthlib.oauth2 import AccessDeniedError
 
 from yt_tools.auth import (
     REQUIRED_SCOPES,
+    WRITE_SCOPES,
     AuthorizationError,
     authorize,
+    authorize_write,
     load_authorized_credentials,
+    load_write_credentials,
     resolve_credential_paths,
 )
 
@@ -36,6 +39,9 @@ class TestAuthorization(unittest.TestCase):
         data_path.assert_called_once_with("yt-tools", appauthor=False)
         self.assertEqual(paths.client_config_file, Path("/user-data/yt-tools/client_secret.json"))
         self.assertEqual(paths.token_file, Path("/user-data/yt-tools/token.json"))
+        self.assertEqual(
+            paths.write_token_file, Path("/user-data/yt-tools/write-token.json")
+        )
 
     def test_missing_stored_token_returns_an_actionable_error(self):
         token = Path("/missing/yt-tools/token.json")
@@ -292,6 +298,121 @@ class TestAuthorization(unittest.TestCase):
             self.assertEqual(stat.S_IMODE(data_dir.stat().st_mode), 0o700)
             self.assertEqual(stat.S_IMODE(client_config.stat().st_mode), 0o600)
             self.assertEqual(stat.S_IMODE(token.stat().st_mode), 0o600)
+
+
+class TestWriteAuthorization(unittest.TestCase):
+    def test_write_scopes_grant_video_edits_only_through_force_ssl(self):
+        self.assertEqual(
+            WRITE_SCOPES, ["https://www.googleapis.com/auth/youtube.force-ssl"]
+        )
+        self.assertNotIn(WRITE_SCOPES[0], REQUIRED_SCOPES)
+
+    def test_write_token_destination_can_be_overridden(self):
+        paths = resolve_credential_paths(write_token_file="/stored/write.json")
+
+        self.assertEqual(paths.write_token_file, Path("/stored/write.json"))
+
+    def test_authorize_write_stores_only_the_write_token(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "client_secret.json"
+            source.write_text(json.dumps(client_payload()), encoding="utf-8")
+            read_token = root / "token.json"
+            read_token.write_text("read-only-token", encoding="utf-8")
+            write_token = root / "write-token.json"
+            credentials = MagicMock(refresh_token="refresh-token")
+            credentials.to_json.return_value = json.dumps({"refresh_token": "w"})
+            flow = MagicMock(credentials=credentials)
+
+            with patch(
+                "yt_tools.auth.InstalledAppFlow.from_client_secrets_file",
+                return_value=flow,
+            ) as create_flow:
+                authorize_write(source, write_token, read_token)
+
+            create_flow.assert_called_once_with(str(source), scopes=WRITE_SCOPES)
+            self.assertEqual(json.loads(write_token.read_text()), {"refresh_token": "w"})
+            self.assertEqual(stat.S_IMODE(write_token.stat().st_mode), 0o600)
+            self.assertEqual(read_token.read_text(), "read-only-token")
+            self.assertEqual(json.loads(source.read_text()), client_payload())
+
+    def test_authorize_write_refuses_to_replace_the_client_secret_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "client_secret.json"
+            source.write_text(json.dumps(client_payload()), encoding="utf-8")
+
+            with self.assertRaisesRegex(AuthorizationError, "must be different"):
+                authorize_write(source, source, Path(directory) / "token.json")
+
+            self.assertEqual(json.loads(source.read_text()), client_payload())
+
+    def test_authorize_write_refuses_to_replace_the_read_only_token(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "client_secret.json"
+            source.write_text(json.dumps(client_payload()), encoding="utf-8")
+            read_token = root / "token.json"
+            read_token.write_text("read-only-token", encoding="utf-8")
+
+            with (
+                patch("yt_tools.auth.InstalledAppFlow.from_client_secrets_file") as create_flow,
+                self.assertRaisesRegex(AuthorizationError, "Read-only and write token"),
+            ):
+                authorize_write(source, read_token, read_token)
+
+            create_flow.assert_not_called()
+            self.assertEqual(read_token.read_text(), "read-only-token")
+
+    def test_denied_write_consent_names_the_write_command(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "client_secret.json"
+            source.write_text(json.dumps(client_payload()), encoding="utf-8")
+            flow = MagicMock()
+            flow.run_local_server.side_effect = AccessDeniedError(description="no")
+
+            with (
+                patch(
+                    "yt_tools.auth.InstalledAppFlow.from_client_secrets_file",
+                    return_value=flow,
+                ),
+                self.assertRaisesRegex(AuthorizationError, "denied.*authorize --write"),
+            ):
+                authorize_write(source, root / "write-token.json", root / "token.json")
+
+            self.assertFalse((root / "write-token.json").exists())
+
+    def test_missing_write_token_names_the_write_command(self):
+        with self.assertRaisesRegex(
+            AuthorizationError, "No stored write authorization.*authorize --write"
+        ):
+            load_write_credentials(Path("/missing/write-token.json"))
+
+    def test_read_only_token_is_rejected_for_writes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            token = Path(directory) / "write-token.json"
+            token.write_text("{}", encoding="utf-8")
+            credentials = MagicMock(valid=True, expired=False, refresh_token=None)
+            credentials.has_scopes.side_effect = lambda scopes: scopes == REQUIRED_SCOPES
+
+            with patch(
+                "yt_tools.auth.Credentials.from_authorized_user_file",
+                return_value=credentials,
+            ), self.assertRaisesRegex(AuthorizationError, "write access.*authorize --write"):
+                load_write_credentials(token)
+
+    def test_write_token_with_write_scope_is_loaded(self):
+        with tempfile.TemporaryDirectory() as directory:
+            token = Path(directory) / "write-token.json"
+            token.write_text("{}", encoding="utf-8")
+            credentials = MagicMock(valid=True, expired=False, refresh_token=None)
+            credentials.has_scopes.side_effect = lambda scopes: scopes == WRITE_SCOPES
+
+            with patch(
+                "yt_tools.auth.Credentials.from_authorized_user_file",
+                return_value=credentials,
+            ):
+                self.assertIs(load_write_credentials(token), credentials)
 
 
 if __name__ == "__main__":

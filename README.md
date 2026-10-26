@@ -66,6 +66,32 @@ yt-tools authorize \
 OAuth files are not discovered from project directories, `.env`, `~/.claude`,
 or `yutu` locations. Do not commit client-secret or token files.
 
+## Edit owned video metadata
+
+Editing needs a separate, opt-in write grant. It reuses the stored client
+configuration and stores `write-token.json` beside the read-only token, which it
+never changes:
+
+```bash
+yt-tools authorize --write
+```
+
+The grant uses Google's `youtube.force-ssl` scope, which allows full management
+of the channel, not only metadata edits. Delete `write-token.json` to stop using
+it, and revoke it at <https://myaccount.google.com/permissions>.
+
+Preview a change to an owned video's title, description, or tags. Nothing is
+saved without `--apply`:
+
+```bash
+yt-tools update VIDEO_ID --description-file description.txt --tags "ai,tools"
+yt-tools update VIDEO_ID --description-file description.txt --tags "ai,tools" --apply
+```
+
+`update` reads the current snippet first and sends it back with only the
+requested fields changed, so category, language, and other unrequested fields
+are kept. It refuses videos the authorized channel does not own.
+
 ## Query channel analytics
 
 Run a synchronous analytics query after authorization:

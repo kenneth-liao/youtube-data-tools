@@ -32,6 +32,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Add a non-blocking thumbnail reach workflow that discovers the current report
   type, reuses or creates its job, lists all files, and downloads explicit
   selections. (#13)
+- Add an opt-in `yt-tools authorize --write` grant stored apart from the
+  read-only token, and `yt-tools update` to preview or, with `--apply`, save an
+  owned video's title, description, and tags. (#28)
 
 ### Fixed
 
