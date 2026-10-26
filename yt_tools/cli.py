@@ -48,7 +48,11 @@ from yt_tools.video_metadata import (
     build_data_api,
     enrich_video_rows,
 )
-from yt_tools.video_update import VideoUpdateError, update_video_metadata
+from yt_tools.video_update import (
+    VideoUpdateError,
+    update_video_metadata,
+    validate_update_fields,
+)
 
 def _load_api_key_environment() -> None:
     """Load legacy API-key locations for public Data API commands only."""
@@ -311,8 +315,14 @@ def cmd_authorize(args: argparse.Namespace) -> int:
         client_secrets = (
             Path(args.client_secrets) if args.client_secrets else paths.client_config_file
         )
+        if not args.client_secrets and not client_secrets.is_file():
+            raise ToolboxError(
+                f"No stored client configuration at {client_secrets}. "
+                "Pass --client-secrets <file>, or run "
+                "yt-tools authorize --client-secrets <file> first."
+            )
         try:
-            authorize_write(client_secrets, paths.write_token_file)
+            authorize_write(client_secrets, paths.write_token_file, paths.token_file)
         except AuthorizationError as error:
             raise ToolboxError(str(error)) from error
         print(
@@ -391,7 +401,12 @@ def cmd_update(args: argparse.Namespace) -> int:
         tags = []
     elif args.tags is not None:
         tags = [tag.strip() for tag in args.tags.split(",") if tag.strip()]
+        if not tags:
+            raise ToolboxError(
+                "--tags contains no tags. Use --clear-tags to remove all tags."
+            )
     try:
+        validate_update_fields(args.title, description, tags)
         write_token = resolve_credential_paths(
             write_token_file=args.write_token_file
         ).write_token_file

@@ -328,7 +328,7 @@ class TestWriteAuthorization(unittest.TestCase):
                 "yt_tools.auth.InstalledAppFlow.from_client_secrets_file",
                 return_value=flow,
             ) as create_flow:
-                authorize_write(source, write_token)
+                authorize_write(source, write_token, read_token)
 
             create_flow.assert_called_once_with(str(source), scopes=WRITE_SCOPES)
             self.assertEqual(json.loads(write_token.read_text()), {"refresh_token": "w"})
@@ -342,9 +342,26 @@ class TestWriteAuthorization(unittest.TestCase):
             source.write_text(json.dumps(client_payload()), encoding="utf-8")
 
             with self.assertRaisesRegex(AuthorizationError, "must be different"):
-                authorize_write(source, source)
+                authorize_write(source, source, Path(directory) / "token.json")
 
             self.assertEqual(json.loads(source.read_text()), client_payload())
+
+    def test_authorize_write_refuses_to_replace_the_read_only_token(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "client_secret.json"
+            source.write_text(json.dumps(client_payload()), encoding="utf-8")
+            read_token = root / "token.json"
+            read_token.write_text("read-only-token", encoding="utf-8")
+
+            with (
+                patch("yt_tools.auth.InstalledAppFlow.from_client_secrets_file") as create_flow,
+                self.assertRaisesRegex(AuthorizationError, "Read-only and write token"),
+            ):
+                authorize_write(source, read_token, read_token)
+
+            create_flow.assert_not_called()
+            self.assertEqual(read_token.read_text(), "read-only-token")
 
     def test_denied_write_consent_names_the_write_command(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -361,7 +378,7 @@ class TestWriteAuthorization(unittest.TestCase):
                 ),
                 self.assertRaisesRegex(AuthorizationError, "denied.*authorize --write"),
             ):
-                authorize_write(source, root / "write-token.json")
+                authorize_write(source, root / "write-token.json", root / "token.json")
 
             self.assertFalse((root / "write-token.json").exists())
 

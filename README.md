@@ -76,6 +76,10 @@ never changes:
 yt-tools authorize --write
 ```
 
+The grant uses Google's `youtube.force-ssl` scope, which allows full management
+of the channel, not only metadata edits. Delete `write-token.json` to stop using
+it, and revoke it at <https://myaccount.google.com/permissions>.
+
 Preview a change to an owned video's title, description, or tags. Nothing is
 saved without `--apply`:
 

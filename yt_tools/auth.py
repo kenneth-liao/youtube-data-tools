@@ -200,7 +200,11 @@ def authorize(
     _write_private(token_file, credentials.to_json())
 
 
-def authorize_write(client_secrets: str | Path, write_token_file: str | Path) -> None:
+def authorize_write(
+    client_secrets: str | Path,
+    write_token_file: str | Path,
+    read_token_file: str | Path,
+) -> None:
     """Grant opt-in write access in a token separate from the read-only one."""
     client_secrets = Path(client_secrets)
     write_token_file = Path(write_token_file)
@@ -208,6 +212,10 @@ def authorize_write(client_secrets: str | Path, write_token_file: str | Path) ->
     if client_secrets.resolve() == write_token_file.resolve():
         raise AuthorizationError(
             "Client configuration and write token destinations must be different files."
+        )
+    if Path(read_token_file).resolve() == write_token_file.resolve():
+        raise AuthorizationError(
+            "Read-only and write token destinations must be different files."
         )
 
     _read_client_config(client_secrets)

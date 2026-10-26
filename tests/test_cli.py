@@ -14,6 +14,10 @@ from yt_tools.auth import AuthorizationError
 from yt_tools.reporting import ReportingDiscoveryError
 from yt_tools.video_update import VideoUpdateError
 
+def mock_token_path():
+    return cli.resolve_credential_paths().token_file
+
+
 class TestCLI(unittest.TestCase):
     def setUp(self):
         # Redirect stdout/stderr to capture output
@@ -325,15 +329,20 @@ class TestCLI(unittest.TestCase):
     def test_authorize_write_reuses_stored_client_and_stores_write_token_only(
         self, mock_authorize_write, mock_authorize
     ):
-        result = cli.main([
-            "authorize", "--write",
-            "--client-config-file", "/stored/client.json",
-            "--write-token-file", "/stored/write.json",
-        ])
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            stored_client = Path(directory) / "client.json"
+            stored_client.write_text("{}", encoding="utf-8")
+            result = cli.main([
+                "authorize", "--write",
+                "--client-config-file", str(stored_client),
+                "--write-token-file", "/stored/write.json",
+            ])
 
         self.assertEqual(result, 0)
         mock_authorize_write.assert_called_once_with(
-            Path("/stored/client.json"), Path("/stored/write.json")
+            stored_client, Path("/stored/write.json"), mock_token_path()
         )
         mock_authorize.assert_not_called()
         self.assertIn("Write authorization complete", sys.stdout.getvalue())
@@ -350,8 +359,20 @@ class TestCLI(unittest.TestCase):
         ])
 
         mock_authorize_write.assert_called_once_with(
-            Path("/source/client.json"), Path("/stored/write.json")
+            Path("/source/client.json"), Path("/stored/write.json"), mock_token_path()
         )
+
+    @patch("yt_tools.cli.authorize_write")
+    def test_authorize_write_without_stored_client_is_actionable(self, mock_authorize_write):
+        result = cli.main([
+            "authorize", "--write",
+            "--client-config-file", "/missing/client.json",
+        ])
+
+        self.assertEqual(result, 1)
+        self.assertIn("No stored client configuration at /missing/client.json", sys.stderr.getvalue())
+        self.assertIn("--client-secrets", sys.stderr.getvalue())
+        mock_authorize_write.assert_not_called()
 
     def _update_result(self, applied=False):
         result = {
@@ -445,6 +466,22 @@ class TestCLI(unittest.TestCase):
 
         cli.main(["update", "vid", "--clear-tags"])
         self.assertEqual(mock_update.call_args.kwargs["tags"], [])
+
+    @patch("yt_tools.cli.load_write_credentials")
+    def test_update_rejects_empty_tags_before_authorization(self, mock_load_write):
+        result = cli.main(["update", "vid", "--tags", " , ", "--apply"])
+
+        self.assertEqual(result, 1)
+        self.assertIn("--clear-tags", sys.stderr.getvalue())
+        mock_load_write.assert_not_called()
+
+    @patch("yt_tools.cli.load_write_credentials")
+    def test_update_without_fields_fails_before_authorization(self, mock_load_write):
+        result = cli.main(["update", "vid"])
+
+        self.assertEqual(result, 1)
+        self.assertIn("at least one field", sys.stderr.getvalue())
+        mock_load_write.assert_not_called()
 
     def test_update_rejects_tags_with_clear_tags(self):
         with self.assertRaises(SystemExit):

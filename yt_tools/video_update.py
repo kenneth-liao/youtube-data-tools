@@ -27,6 +27,23 @@ def _requested(title, description, tags) -> dict:
     }
 
 
+def validate_update_fields(
+    title: str | None = None,
+    description: str | None = None,
+    tags: list[str] | None = None,
+) -> dict:
+    """Return the requested fields, rejecting invalid input before any API call."""
+    requested = _requested(title, description, tags)
+    if not requested:
+        raise VideoUpdateError(
+            "Select at least one field to change: --title, --description, "
+            "--description-file, --tags, or --clear-tags."
+        )
+    if title is not None and not title.strip():
+        raise VideoUpdateError("The video title cannot be empty.")
+    return requested
+
+
 def build_snippet_update(
     current: dict,
     title: str | None = None,
@@ -38,8 +55,6 @@ def build_snippet_update(
     videos.update replaces the whole snippet, so omitted writable fields such as
     tags or categoryId would be cleared.
     """
-    if title is not None and not title.strip():
-        raise VideoUpdateError("The video title cannot be empty.")
     snippet = {
         name: value
         for name, value in current.items()
@@ -71,12 +86,7 @@ def update_video_metadata(
     apply: bool = False,
 ) -> dict:
     """Preview, or with apply save, title/description/tag changes to an owned video."""
-    requested = _requested(title, description, tags)
-    if not requested:
-        raise VideoUpdateError(
-            "Select at least one field to change: --title, --description, "
-            "--description-file, --tags, or --clear-tags."
-        )
+    requested = validate_update_fields(title, description, tags)
 
     items = _execute(api.videos().list(part="snippet", id=video_id)).get("items", [])
     if not items:

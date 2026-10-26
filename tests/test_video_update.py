@@ -8,6 +8,7 @@ from yt_tools.video_update import (
     VideoUpdateError,
     build_snippet_update,
     update_video_metadata,
+    validate_update_fields,
 )
 
 
@@ -75,10 +76,6 @@ class TestBuildSnippetUpdate(unittest.TestCase):
     def test_empty_tag_list_clears_tags(self):
         self.assertEqual(build_snippet_update(current_snippet(), tags=[])["tags"], [])
 
-    def test_blank_title_is_rejected(self):
-        with self.assertRaisesRegex(VideoUpdateError, "title"):
-            build_snippet_update(current_snippet(), title="  ")
-
     def test_current_snippet_is_not_mutated(self):
         snippet = current_snippet()
         build_snippet_update(snippet, tags=["new"])
@@ -129,7 +126,14 @@ class TestUpdateVideoMetadata(unittest.TestCase):
             part="snippet",
             body={
                 "id": "vid",
-                "snippet": build_snippet_update(current_snippet(), title="New title"),
+                "snippet": {
+                    "title": "New title",
+                    "description": "Old description",
+                    "tags": ["old", "kept"],
+                    "categoryId": "28",
+                    "defaultLanguage": "en",
+                    "defaultAudioLanguage": "en-US",
+                },
             },
         )
         self.assertTrue(result["applied"])
@@ -165,6 +169,21 @@ class TestUpdateVideoMetadata(unittest.TestCase):
             update_video_metadata(api, "vid")
 
         api.videos.return_value.list.assert_not_called()
+
+    def test_blank_title_is_rejected_before_any_api_call(self):
+        api = data_api()
+
+        with self.assertRaisesRegex(VideoUpdateError, "title cannot be empty"):
+            update_video_metadata(api, "vid", title="  ")
+
+        api.videos.assert_not_called()
+        api.channels.assert_not_called()
+
+    def test_validation_returns_only_requested_fields(self):
+        self.assertEqual(
+            validate_update_fields(description="New", tags=[]),
+            {"description": "New", "tags": []},
+        )
 
     def test_google_api_errors_are_actionable(self):
         api = data_api()
