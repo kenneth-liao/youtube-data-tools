@@ -12,6 +12,7 @@ from googleapiclient.errors import HttpError
 from yt_tools import cli
 from yt_tools.auth import AuthorizationError
 from yt_tools.reporting import ReportingDiscoveryError
+from yt_tools.video_update import VideoUpdateError
 
 class TestCLI(unittest.TestCase):
     def setUp(self):
@@ -310,6 +311,206 @@ class TestCLI(unittest.TestCase):
             Path("/stored/token.json"),
         )
         self.assertIn("Authorization complete", sys.stdout.getvalue())
+
+    @patch("yt_tools.cli.authorize")
+    def test_authorize_requires_client_secrets_without_write(self, mock_authorize):
+        result = cli.main(["authorize"])
+
+        self.assertEqual(result, 1)
+        self.assertIn("--client-secrets", sys.stderr.getvalue())
+        mock_authorize.assert_not_called()
+
+    @patch("yt_tools.cli.authorize")
+    @patch("yt_tools.cli.authorize_write")
+    def test_authorize_write_reuses_stored_client_and_stores_write_token_only(
+        self, mock_authorize_write, mock_authorize
+    ):
+        result = cli.main([
+            "authorize", "--write",
+            "--client-config-file", "/stored/client.json",
+            "--write-token-file", "/stored/write.json",
+        ])
+
+        self.assertEqual(result, 0)
+        mock_authorize_write.assert_called_once_with(
+            Path("/stored/client.json"), Path("/stored/write.json")
+        )
+        mock_authorize.assert_not_called()
+        self.assertIn("Write authorization complete", sys.stdout.getvalue())
+        self.assertIn("/stored/write.json", sys.stdout.getvalue())
+
+    @patch("yt_tools.cli.authorize_write")
+    def test_authorize_write_accepts_an_explicit_client_secret_source(
+        self, mock_authorize_write
+    ):
+        cli.main([
+            "authorize", "--write",
+            "--client-secrets", "/source/client.json",
+            "--write-token-file", "/stored/write.json",
+        ])
+
+        mock_authorize_write.assert_called_once_with(
+            Path("/source/client.json"), Path("/stored/write.json")
+        )
+
+    def _update_result(self, applied=False):
+        result = {
+            "videoId": "vid",
+            "applied": applied,
+            "changes": {
+                "title": {"current": "Old", "proposed": "New"},
+                "description": {"current": "line one\nold", "proposed": "line one\nnew"},
+                "tags": {"current": ["a"], "proposed": ["a", "b"]},
+            },
+        }
+        if applied:
+            result["saved"] = {"title": "New", "description": "line one\nnew", "tags": ["a", "b"]}
+        return result
+
+    @patch("yt_tools.cli.update_video_metadata")
+    @patch("yt_tools.cli.build_data_api")
+    @patch("yt_tools.cli.load_authorized_credentials")
+    @patch("yt_tools.cli.load_write_credentials")
+    def test_update_previews_with_the_write_token_by_default(
+        self, mock_load_write, mock_load_read, mock_build, mock_update
+    ):
+        mock_update.return_value = self._update_result()
+
+        result = cli.main([
+            "update", "vid", "--title", "New",
+            "--write-token-file", "/stored/write.json",
+        ])
+
+        self.assertEqual(result, 0)
+        mock_load_write.assert_called_once_with(Path("/stored/write.json"))
+        mock_load_read.assert_not_called()
+        mock_build.assert_called_once_with(mock_load_write.return_value)
+        mock_update.assert_called_once_with(
+            mock_build.return_value, "vid",
+            title="New", description=None, tags=None, apply=False,
+        )
+        output = sys.stdout.getvalue()
+        self.assertIn("Nothing saved", output)
+        self.assertIn("--apply", output)
+        self.assertIn("-old", output)
+        self.assertIn("+new", output)
+        self.assertIn("a, b", output)
+
+    @patch("yt_tools.cli.update_video_metadata")
+    @patch("yt_tools.cli.build_data_api")
+    @patch("yt_tools.cli.load_write_credentials")
+    def test_update_apply_saves_and_reports_saved_values(
+        self, mock_load_write, mock_build, mock_update
+    ):
+        mock_update.return_value = self._update_result(applied=True)
+
+        result = cli.main(["update", "vid", "--title", "New", "--apply"])
+
+        self.assertEqual(result, 0)
+        self.assertTrue(mock_update.call_args.kwargs["apply"])
+        output = sys.stdout.getvalue()
+        self.assertIn("Saved", output)
+        self.assertNotIn("Nothing saved", output)
+
+    @patch("yt_tools.cli.update_video_metadata")
+    @patch("yt_tools.cli.build_data_api")
+    @patch("yt_tools.cli.load_write_credentials")
+    def test_update_reports_when_nothing_changes(
+        self, mock_load_write, mock_build, mock_update
+    ):
+        mock_update.return_value = {"videoId": "vid", "applied": False, "changes": {}}
+
+        cli.main(["update", "vid", "--title", "Same", "--apply"])
+
+        self.assertIn("No changes", sys.stdout.getvalue())
+
+    @patch("yt_tools.cli.update_video_metadata")
+    @patch("yt_tools.cli.build_data_api")
+    @patch("yt_tools.cli.load_write_credentials")
+    def test_update_json_outputs_the_result(self, mock_load_write, mock_build, mock_update):
+        mock_update.return_value = self._update_result()
+
+        cli.main(["update", "vid", "--title", "New", "--json"])
+
+        self.assertEqual(json.loads(sys.stdout.getvalue()), self._update_result())
+
+    @patch("yt_tools.cli.update_video_metadata")
+    @patch("yt_tools.cli.build_data_api")
+    @patch("yt_tools.cli.load_write_credentials")
+    def test_update_parses_tags_and_clear_tags(self, mock_load_write, mock_build, mock_update):
+        mock_update.return_value = {"videoId": "vid", "applied": False, "changes": {}}
+
+        cli.main(["update", "vid", "--tags", " a, b ,,c "])
+        self.assertEqual(mock_update.call_args.kwargs["tags"], ["a", "b", "c"])
+
+        cli.main(["update", "vid", "--clear-tags"])
+        self.assertEqual(mock_update.call_args.kwargs["tags"], [])
+
+    def test_update_rejects_tags_with_clear_tags(self):
+        with self.assertRaises(SystemExit):
+            cli.main(["update", "vid", "--tags", "a", "--clear-tags"])
+
+    def test_update_rejects_description_with_description_file(self):
+        with self.assertRaises(SystemExit):
+            cli.main(["update", "vid", "--description", "a", "--description-file", "f"])
+
+    @patch("yt_tools.cli.update_video_metadata")
+    @patch("yt_tools.cli.build_data_api")
+    @patch("yt_tools.cli.load_write_credentials")
+    def test_update_reads_description_file_and_stdin(
+        self, mock_load_write, mock_build, mock_update
+    ):
+        import tempfile
+
+        mock_update.return_value = {"videoId": "vid", "applied": False, "changes": {}}
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "description.txt"
+            source.write_text("Line one\n\nLine two\n", encoding="utf-8")
+            cli.main(["update", "vid", "--description-file", str(source)])
+        self.assertEqual(
+            mock_update.call_args.kwargs["description"], "Line one\n\nLine two"
+        )
+
+        with patch("sys.stdin", StringIO("From stdin\n")):
+            cli.main(["update", "vid", "--description-file", "-"])
+        self.assertEqual(mock_update.call_args.kwargs["description"], "From stdin")
+
+    def test_update_missing_description_file_is_actionable(self):
+        result = cli.main(["update", "vid", "--description-file", "/missing/description.txt"])
+
+        self.assertEqual(result, 1)
+        self.assertIn("/missing/description.txt", sys.stderr.getvalue())
+        self.assertNotIn("Unexpected", sys.stderr.getvalue())
+
+    @patch("yt_tools.cli.load_write_credentials")
+    def test_update_without_write_grant_names_the_write_command(self, mock_load_write):
+        mock_load_write.side_effect = AuthorizationError(
+            "No stored write authorization found. Run yt-tools authorize --write."
+        )
+
+        result = cli.main(["update", "vid", "--title", "New"])
+
+        self.assertEqual(result, 1)
+        self.assertIn("yt-tools authorize --write", sys.stderr.getvalue())
+
+    @patch("yt_tools.cli.update_video_metadata")
+    @patch("yt_tools.cli.build_data_api")
+    @patch("yt_tools.cli.load_write_credentials")
+    def test_update_api_failures_are_actionable(self, mock_load_write, mock_build, mock_update):
+        mock_update.side_effect = VideoUpdateError("Video vid was not found. Check the video ID.")
+
+        result = cli.main(["update", "vid", "--title", "New"])
+
+        self.assertEqual(result, 1)
+        self.assertIn("Video vid was not found", sys.stderr.getvalue())
+        self.assertNotIn("Unexpected", sys.stderr.getvalue())
+
+    def test_docs_describe_the_write_grant_and_update(self):
+        cli.main(["docs"])
+        output = sys.stdout.getvalue()
+
+        self.assertIn("authorize --write", output)
+        self.assertIn("### `update`", output)
 
     @patch("yt_tools.cli.build_reporting_api")
     @patch("yt_tools.cli.load_authorized_credentials")

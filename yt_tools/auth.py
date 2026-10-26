@@ -18,6 +18,10 @@ REQUIRED_SCOPES = [
     "https://www.googleapis.com/auth/yt-analytics-monetary.readonly",
 ]
 
+WRITE_SCOPES = [
+    "https://www.googleapis.com/auth/youtube.force-ssl",
+]
+
 
 class AuthorizationError(Exception):
     """An actionable authorization failure safe to display to the user."""
@@ -27,11 +31,13 @@ class AuthorizationError(Exception):
 class CredentialPaths:
     client_config_file: Path
     token_file: Path
+    write_token_file: Path
 
 
 def resolve_credential_paths(
     client_config_file: str | Path | None = None,
     token_file: str | Path | None = None,
+    write_token_file: str | Path | None = None,
 ) -> CredentialPaths:
     """Resolve canonical credential destinations without searching other locations."""
     data_directory = user_data_path("yt-tools", appauthor=False)
@@ -42,6 +48,11 @@ def resolve_credential_paths(
             else data_directory / "client_secret.json"
         ),
         token_file=(Path(token_file) if token_file else data_directory / "token.json"),
+        write_token_file=(
+            Path(write_token_file)
+            if write_token_file
+            else data_directory / "write-token.json"
+        ),
     )
 
 
@@ -69,18 +80,54 @@ def _write_private(path: Path, content: str) -> None:
 
 def load_authorized_credentials(token_file: str | Path) -> Credentials:
     """Load credentials for an authorized channel without repeating consent."""
-    token_file = Path(token_file)
-    if not token_file.is_file():
-        raise AuthorizationError(
+    return _load_credentials(
+        Path(token_file),
+        REQUIRED_SCOPES,
+        missing=(
             f"No stored authorization found at {token_file}. "
             "Run yt-tools authorize --client-secrets <file>."
-        )
+        ),
+        command="yt-tools authorize",
+        lacks_scopes=(
+            "Stored authorization lacks the required read-only access. "
+            "Run yt-tools authorize again."
+        ),
+    )
+
+
+def load_write_credentials(write_token_file: str | Path) -> Credentials:
+    """Load the opt-in write grant for editing an authorized channel's videos."""
+    return _load_credentials(
+        Path(write_token_file),
+        WRITE_SCOPES,
+        missing=(
+            f"No stored write authorization found at {write_token_file}. "
+            "Run yt-tools authorize --write."
+        ),
+        command="yt-tools authorize --write",
+        lacks_scopes=(
+            "Stored write authorization lacks YouTube write access. "
+            "Run yt-tools authorize --write."
+        ),
+    )
+
+
+def _load_credentials(
+    token_file: Path,
+    scopes: list[str],
+    *,
+    missing: str,
+    command: str,
+    lacks_scopes: str,
+) -> Credentials:
+    if not token_file.is_file():
+        raise AuthorizationError(missing)
     try:
         credentials = Credentials.from_authorized_user_file(str(token_file))
     except (OSError, ValueError, TypeError, AttributeError) as error:
         raise AuthorizationError(
             f"Stored authorization at {token_file} is malformed. "
-            "Run yt-tools authorize again."
+            f"Run {command} again."
         ) from error
     if credentials.expired and credentials.refresh_token:
         try:
@@ -88,19 +135,16 @@ def load_authorized_credentials(token_file: str | Path) -> Credentials:
         except GoogleAuthError as error:
             raise AuthorizationError(
                 "Stored authorization refresh failed. "
-                "Run yt-tools authorize again."
+                f"Run {command} again."
             ) from error
         _write_private(token_file, credentials.to_json())
     if not credentials.valid:
         raise AuthorizationError(
             "Stored authorization cannot be refreshed. "
-            "Run yt-tools authorize again."
+            f"Run {command} again."
         )
-    if not credentials.has_scopes(REQUIRED_SCOPES):
-        raise AuthorizationError(
-            "Stored authorization lacks the required read-only access. "
-            "Run yt-tools authorize again."
-        )
+    if not credentials.has_scopes(scopes):
+        raise AuthorizationError(lacks_scopes)
     return credentials
 
 
@@ -148,28 +192,53 @@ def authorize(
         )
 
     payload = _read_client_config(client_secrets)
+    credentials = _run_consent(
+        client_secrets, REQUIRED_SCOPES, "yt-tools authorize", "read-only access"
+    )
 
+    _write_private(client_config_file, json.dumps(payload))
+    _write_private(token_file, credentials.to_json())
+
+
+def authorize_write(client_secrets: str | Path, write_token_file: str | Path) -> None:
+    """Grant opt-in write access in a token separate from the read-only one."""
+    client_secrets = Path(client_secrets)
+    write_token_file = Path(write_token_file)
+
+    if client_secrets.resolve() == write_token_file.resolve():
+        raise AuthorizationError(
+            "Client configuration and write token destinations must be different files."
+        )
+
+    _read_client_config(client_secrets)
+    credentials = _run_consent(
+        client_secrets, WRITE_SCOPES, "yt-tools authorize --write", "write access"
+    )
+    _write_private(write_token_file, credentials.to_json())
+
+
+def _run_consent(
+    client_secrets: Path, scopes: list[str], command: str, access: str
+) -> Credentials:
     try:
         flow = InstalledAppFlow.from_client_secrets_file(
-            str(client_secrets), scopes=REQUIRED_SCOPES
+            str(client_secrets), scopes=scopes
         )
         flow.run_local_server(port=0, access_type="offline", prompt="consent")
     except AccessDeniedError as error:
         raise AuthorizationError(
             "Channel-owner authorization was denied. "
-            "Run yt-tools authorize again and grant the requested read-only access."
+            f"Run {command} again and grant the requested {access}."
         ) from error
     except Exception as error:
         raise AuthorizationError(
             "Channel-owner authorization failed before completion. Check the OAuth "
-            "client configuration and network, then run yt-tools authorize again."
+            f"client configuration and network, then run {command} again."
         ) from error
 
     if not flow.credentials.refresh_token:
         raise AuthorizationError(
             "Google did not return a refreshable token. "
-            "Run yt-tools authorize again and complete consent."
+            f"Run {command} again and complete consent."
         )
-
-    _write_private(client_config_file, json.dumps(payload))
-    _write_private(token_file, flow.credentials.to_json())
+    return flow.credentials

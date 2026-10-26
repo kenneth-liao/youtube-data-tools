@@ -143,15 +143,49 @@ Authorize access to an owned YouTube channel with a Google OAuth client-secret f
 **Usage:**
 ```bash
 yt-tools authorize --client-secrets <source> [options]
+yt-tools authorize --write [options]
 ```
 
 **Options:**
-- `--client-secrets <path>`: Required user-selected Google OAuth client-secret source file
+- `--client-secrets <path>`: User-selected Google OAuth client-secret source file; required without `--write`
 - `--client-config-file <path>`: Stored canonical client configuration destination
 - `--token-file <path>`: Stored refreshable token destination
+- `--write`: Grant opt-in write access (`youtube.force-ssl`) in a separate write token
+- `--write-token-file <path>`: Stored write token destination
 
 Without destination overrides, credentials are stored with owner-only access in
 the operating system's per-user `yt-tools` application-data directory.
+
+`yt-tools authorize --write` reuses the stored client configuration unless
+`--client-secrets` is given. It stores only `write-token.json` and never changes
+the read-only `token.json`, so read commands never run with write access.
+
+---
+
+### `update`
+Preview or save title, description, and tag changes to a video owned by the
+authorized channel. Requires the write grant from `yt-tools authorize --write`.
+
+**Usage:**
+```bash
+yt-tools update <video_id> [fields] [options]
+```
+
+**Fields (at least one):**
+- `--title <text>`: New title
+- `--description <text>`: New description
+- `--description-file <path>`: Read the new description from a file, or `-` for stdin; trailing newlines are removed
+- `--tags <a,b,c>`: Replace all tags with a comma-separated list
+- `--clear-tags`: Remove all tags
+
+**Options:**
+- `--apply`: Save the changes; without it, `update` prints a preview and saves nothing
+- `--json`: Output the result as JSON
+- `--write-token-file <path>`: Stored write token override
+
+`update` reads the video's current snippet, confirms the authorized channel owns
+it, and sends the full snippet back with only the requested fields changed, so
+category, language, and unrequested fields are kept.
 
 ---
 
