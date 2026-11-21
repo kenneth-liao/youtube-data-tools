@@ -35,6 +35,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Add an opt-in `yt-tools authorize --write` grant stored apart from the
   read-only token, and `yt-tools update` to preview or, with `--apply`, save an
   owned video's title, description, and tags. (#28)
+- Add `yt-tools uploads <channel_id>` to list a channel's latest uploads from
+  its uploads playlist for 2 quota units per 50 uploads or fewer, where a search
+  filtered by channel costs 100. (#30)
 
 ### Fixed
 

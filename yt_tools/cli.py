@@ -201,6 +201,48 @@ def cmd_channel(args: argparse.Namespace) -> int:
         raise ToolboxError(f"Error getting channel details: {e}")
     return 0
 
+def positive_int(value: str) -> int:
+    """An argparse type: a whole number of 1 or more."""
+    try:
+        number = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{value!r} is not a whole number")
+    if number < 1:
+        raise argparse.ArgumentTypeError("must be 1 or more")
+    return number
+
+
+def cmd_uploads(args: argparse.Namespace) -> int:
+    service = _get_service()
+    try:
+        results = service.get_channel_uploads(args.channel_id, args.max_results)
+        if 'channelId' not in results:
+            raise ToolboxError(f"Channel with ID {args.channel_id} not found.")
+
+        if args.json:
+            print_json(results)
+        else:
+            items = results.get('items', [])
+            if not items:
+                print("No uploads found.")
+                return 0
+
+            print(f"Latest {len(items)} uploads:\n")
+            for item in items:
+                video_id = item.get('contentDetails', {}).get('videoId')
+                snippet = item.get('snippet', {})
+                published = item.get('contentDetails', {}).get('videoPublishedAt')
+                print(f"- {snippet.get('title')} (ID: {video_id})")
+                print(f"  Published: {published}")
+                print(f"  URL: https://www.youtube.com/watch?v={video_id}")
+                print()
+
+    except ToolboxError:
+        raise
+    except Exception as e:
+        raise ToolboxError(f"Error getting channel uploads: {e}")
+    return 0
+
 def cmd_transcript(args: argparse.Namespace) -> int:
     service = _get_service()
     try:
@@ -651,6 +693,7 @@ Commands:
   search       Search for videos
   details      Get video details
   channel      Get channel details
+  uploads      List a channel's latest uploads
   transcript   Get video transcript
   comments     Get video comments
   related      Get related videos
@@ -711,6 +754,23 @@ Arguments:
 
 Options:
   --json          Output results in JSON format
+""",
+    "uploads": """
+List a channel's latest uploads, newest first.
+
+This reads the channel's uploads playlist. It costs 2 quota units for up to
+50 uploads, where a search filtered by channel costs 100.
+
+Usage:
+  yt-tools uploads <channel_id> [options]
+
+Arguments:
+  channel_id      Channel identity: raw UC… channel ID, /channel/UC… URL,
+                  @handle, or handle URL
+
+Options:
+  --max-results <int>   Maximum number of uploads to return (default: 25)
+  --json                Output results in JSON format
 """,
     "transcript": """
 Get the transcript/captions for a video.
@@ -1013,6 +1073,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     c.add_argument("--json", action="store_true", help="Output JSON")
     c.set_defaults(func=cmd_channel)
+
+    # Uploads
+    u = sub.add_parser("uploads", help="List a channel's latest uploads", custom_help_text=COMMAND_DOCS["uploads"])
+    u.add_argument(
+        "channel_id",
+        help="Raw UC channel ID, /channel/ URL, @handle, or handle URL",
+    )
+    u.add_argument("--max-results", type=positive_int, default=25, help="Maximum number of uploads (1 or more)")
+    u.add_argument("--json", action="store_true", help="Output JSON")
+    u.set_defaults(func=cmd_uploads)
 
     # Transcript
     t = sub.add_parser("transcript", help="Get video transcript", custom_help_text=COMMAND_DOCS["transcript"])

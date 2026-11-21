@@ -136,6 +136,61 @@ class YouTubeService:
             logger.error(f"Error getting channel details: {e}")
             raise e
     
+    def get_channel_uploads(self, channel_id: str, max_results: int = 25) -> Dict[str, Any]:
+        """
+        List a channel's latest uploads, newest first, from its uploads playlist.
+
+        This costs one quota unit for the channel lookup and one per page of 50
+        uploads. A search filtered by channel returns the same videos for 100 units.
+        """
+        if max_results < 1:
+            raise ValueError("max_results must be 1 or more.")
+        lookup = self._parse_channel_identity(channel_id)
+
+        try:
+            channel = self.youtube.channels().list(
+                part='contentDetails',
+                **lookup,
+            ).execute()
+            if not channel.get('items'):
+                return {'items': []}
+            channel_id = channel['items'][0]['id']
+            playlist_id = (
+                channel['items'][0].get('contentDetails', {}).get('relatedPlaylists', {}).get('uploads')
+            )
+            if not playlist_id:
+                return {'channelId': channel_id, 'uploadsPlaylistId': None, 'items': []}
+
+            items: List[Dict[str, Any]] = []
+            page_token = None
+            while len(items) < max_results:
+                params = {
+                    'part': 'snippet,contentDetails',
+                    'playlistId': playlist_id,
+                    'maxResults': min(50, max_results - len(items)),
+                }
+                if page_token:
+                    params['pageToken'] = page_token
+                try:
+                    page = self.youtube.playlistItems().list(**params).execute()
+                except HttpError as e:
+                    # A channel with no uploads has no uploads playlist to read: the API answers 404.
+                    if e.resp.status == 404 and not items:
+                        break
+                    raise
+                items.extend(page.get('items', []))
+                page_token = page.get('nextPageToken')
+                if not page_token:
+                    break
+            return {
+                'channelId': channel_id,
+                'uploadsPlaylistId': playlist_id,
+                'items': items[:max_results],
+            }
+        except HttpError as e:
+            logger.error(f"Error getting channel uploads: {e}")
+            raise e
+
     def get_video_comments(self, video_id: str, max_results: int = 20, **options) -> Dict[str, Any]:
         """
         Get comments for a specific YouTube video
