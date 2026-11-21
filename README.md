@@ -311,6 +311,9 @@ yt-tools transcript <video_id>
 
 # Get channel stats
 yt-tools channel <channel_id>
+
+# List a channel's latest uploads (2 quota units; a search by channel costs 100)
+yt-tools uploads <channel_id> --max-results 25
 ```
 
 ## Development

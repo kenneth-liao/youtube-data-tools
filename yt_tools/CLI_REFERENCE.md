@@ -65,6 +65,28 @@ yt-tools channel <channel_id> [options]
 
 ---
 
+### `uploads`
+List a channel's latest uploads, newest first.
+
+This reads the channel's uploads playlist. It costs 2 quota units for up to 50
+uploads, where a `search` filtered by channel costs 100.
+
+**Usage:**
+```bash
+yt-tools uploads <channel_id> [options]
+```
+
+**Arguments:**
+- `channel_id`: Channel identity: raw UC… channel ID, `/channel/UC…` URL,
+  `@handle`, or handle URL
+
+**Options:**
+- `-h, --help`: Show help message for the 'uploads' command
+- `--max-results <int>`: Maximum number of uploads to return (default: 25)
+- `--json`: Output results in JSON format
+
+---
+
 ### `transcript`
 Get the transcript/captions for a video.
 
