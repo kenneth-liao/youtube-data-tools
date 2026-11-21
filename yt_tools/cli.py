@@ -201,6 +201,17 @@ def cmd_channel(args: argparse.Namespace) -> int:
         raise ToolboxError(f"Error getting channel details: {e}")
     return 0
 
+def positive_int(value: str) -> int:
+    """An argparse type: a whole number of 1 or more."""
+    try:
+        number = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{value!r} is not a whole number")
+    if number < 1:
+        raise argparse.ArgumentTypeError("must be 1 or more")
+    return number
+
+
 def cmd_uploads(args: argparse.Namespace) -> int:
     service = _get_service()
     try:
@@ -1069,7 +1080,7 @@ def build_parser() -> argparse.ArgumentParser:
         "channel_id",
         help="Raw UC channel ID, /channel/ URL, @handle, or handle URL",
     )
-    u.add_argument("--max-results", type=int, default=25, help="Maximum number of uploads")
+    u.add_argument("--max-results", type=positive_int, default=25, help="Maximum number of uploads (1 or more)")
     u.add_argument("--json", action="store_true", help="Output JSON")
     u.set_defaults(func=cmd_uploads)
 

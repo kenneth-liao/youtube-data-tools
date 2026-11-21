@@ -4,11 +4,20 @@ import unittest
 from io import StringIO
 from unittest.mock import MagicMock, patch
 
+from googleapiclient.errors import HttpError
+
 from yt_tools import cli
 from yt_tools.core import YouTubeService
 
 CHANNEL_ID = "UCabcdefghijklmnopqrstuv"
 PLAYLIST_ID = "UUabcdefghijklmnopqrstuv"
+
+
+def http_error(status):
+    response = MagicMock()
+    response.status = status
+    response.reason = "error"
+    return HttpError(response, b'{"error": {"message": "error"}}')
 
 
 def upload(n):
@@ -81,6 +90,36 @@ class TestChannelUploads(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.service.get_channel_uploads(CHANNEL_ID, 0)
 
+    def test_a_channel_whose_uploads_playlist_is_not_found_has_no_uploads(self):
+        self.playlist.return_value.execute.side_effect = http_error(404)
+
+        result = self.service.get_channel_uploads(CHANNEL_ID, 25)
+
+        self.assertEqual(result, {"channelId": CHANNEL_ID, "uploadsPlaylistId": PLAYLIST_ID, "items": []})
+
+    def test_a_channel_with_no_uploads_playlist_has_no_uploads_and_reads_no_playlist(self):
+        self.channels.return_value.execute.return_value = {"items": [{"id": CHANNEL_ID, "contentDetails": {}}]}
+
+        result = self.service.get_channel_uploads(CHANNEL_ID, 25)
+
+        self.assertEqual(result, {"channelId": CHANNEL_ID, "uploadsPlaylistId": None, "items": []})
+        self.playlist.assert_not_called()
+
+    def test_another_api_error_on_the_playlist_is_raised(self):
+        self.playlist.return_value.execute.side_effect = http_error(403)
+
+        with self.assertRaises(HttpError):
+            self.service.get_channel_uploads(CHANNEL_ID, 25)
+
+    def test_a_404_after_the_first_page_is_raised(self):
+        self.playlist.return_value.execute.side_effect = [
+            {"items": [upload(n) for n in range(50)], "nextPageToken": "page2"},
+            http_error(404),
+        ]
+
+        with self.assertRaises(HttpError):
+            self.service.get_channel_uploads(CHANNEL_ID, 60)
+
 
 class TestUploadsCommand(unittest.TestCase):
     def setUp(self):
@@ -114,6 +153,26 @@ class TestUploadsCommand(unittest.TestCase):
             cli.cmd_uploads(argparse.Namespace(channel_id=CHANNEL_ID, max_results=25, json=False))
 
         self.assertIn("not found", str(raised.exception))
+
+    @patch("yt_tools.cli._get_service")
+    def test_a_channel_with_no_uploads_says_so_and_is_not_an_error(self, mock_get_service):
+        mock_get_service.return_value.get_channel_uploads.return_value = {
+            "channelId": CHANNEL_ID, "uploadsPlaylistId": None, "items": [],
+        }
+
+        ret = cli.cmd_uploads(argparse.Namespace(channel_id=CHANNEL_ID, max_results=25, json=False))
+
+        self.assertEqual(ret, 0)
+        self.assertIn("No uploads found.", sys.stdout.getvalue())
+
+    @patch("yt_tools.cli._get_service")
+    def test_a_count_below_one_is_refused_before_the_service_is_made(self, mock_get_service):
+        for value in ("0", "-3", "many"):
+            with self.subTest(value=value):
+                with self.assertRaises(SystemExit) as raised:
+                    cli.main(["uploads", CHANNEL_ID, "--max-results", value])
+                self.assertNotEqual(raised.exception.code, 0)
+        mock_get_service.assert_not_called()
 
     def test_help_gives_the_identity_shapes_and_the_quota_cost(self):
         with self.assertRaises(SystemExit) as raised:

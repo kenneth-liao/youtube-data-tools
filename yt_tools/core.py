@@ -154,7 +154,12 @@ class YouTubeService:
             ).execute()
             if not channel.get('items'):
                 return {'items': []}
-            playlist_id = channel['items'][0]['contentDetails']['relatedPlaylists']['uploads']
+            channel_id = channel['items'][0]['id']
+            playlist_id = (
+                channel['items'][0].get('contentDetails', {}).get('relatedPlaylists', {}).get('uploads')
+            )
+            if not playlist_id:
+                return {'channelId': channel_id, 'uploadsPlaylistId': None, 'items': []}
 
             items: List[Dict[str, Any]] = []
             page_token = None
@@ -166,13 +171,19 @@ class YouTubeService:
                 }
                 if page_token:
                     params['pageToken'] = page_token
-                page = self.youtube.playlistItems().list(**params).execute()
+                try:
+                    page = self.youtube.playlistItems().list(**params).execute()
+                except HttpError as e:
+                    # A channel with no uploads has no uploads playlist to read: the API answers 404.
+                    if e.resp.status == 404 and not items:
+                        break
+                    raise
                 items.extend(page.get('items', []))
                 page_token = page.get('nextPageToken')
                 if not page_token:
                     break
             return {
-                'channelId': channel['items'][0]['id'],
+                'channelId': channel_id,
                 'uploadsPlaylistId': playlist_id,
                 'items': items[:max_results],
             }
